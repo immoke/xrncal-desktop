@@ -70,8 +70,16 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
   let taskRequests = 0
   let otherTaskRequests = 0
   let wrongWorkspaceRequests = 0
-  const newTasks = new Map<string, string>()
-  let taskRevision = 1
+  const newTasks = new Map<string, { body: string; etag: string }>()
+  let taskRevision = 0
+  let loseCreateReply = true
+  let refuseNextMoveRemoval = false
+  let nativeTaskMoves = 0
+  const saveTask = (path: string, body: string) => {
+    const etag = `"task-${++taskRevision}"`
+    newTasks.set(path, { body, etag })
+    return etag
+  }
   let category: { cal_displayname: string; cal_color: string } | null = null
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = []
@@ -137,7 +145,9 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
         if (method === 'delete') {
           if (jsonString('cal_id') !== categoryId) { invalidParameters(); return }
           category = null
-          newTasks.clear()
+          for (const path of newTasks.keys()) {
+            if (path.startsWith(custom)) newTasks.delete(path)
+          }
           reply()
           return
         }
@@ -177,32 +187,30 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
     if (request.method === 'REPORT') {
       if (body.includes('name="VTODO"')) {
         taskRequests++
-        if (path === custom && category) {
-          xml(response, Array.from(newTasks, ([name, data]) => resource(name, `"task-${taskRevision}"`, data)).join(''))
-          return
-        }
-        if (request.url !== list) {
+        if (path !== list && !(path === custom && category)) {
           response.writeHead(404).end()
           return
         }
-        xml(response, resource(href, etag, ics) + resource(recurringHref, '"recurring"', recurring))
+        const added = Array.from(newTasks).filter(([name]) => name.startsWith(path))
+          .map(([name, data]) => resource(name, data.etag, data.body)).join('')
+        xml(response, (path === list ? resource(href, etag, ics) + resource(recurringHref, '"recurring"', recurring) : '') + added)
       } else {
         if (body.includes('name="VEVENT"')) wrongWorkspaceRequests++
         xml(response)
       }
       return
     }
-    if (path.startsWith(custom) && path.endsWith('.ics') && category) {
-      const currentTag = `"task-${taskRevision}"`
-      if (request.method === 'GET' && newTasks.has(path)) {
-        response.writeHead(200, { 'Content-Type': 'text/calendar; charset=utf-8', ETag: currentTag })
-        response.end(newTasks.get(path))
+    if (path.endsWith('.ics') && path !== href && path !== recurringHref &&
+      (path.startsWith(list) || (path.startsWith(custom) && category))) {
+      const current = newTasks.get(path)
+      if (request.method === 'GET' && current) {
+        response.writeHead(200, { 'Content-Type': 'text/calendar; charset=utf-8', ETag: current.etag })
+        response.end(current.body)
         return
       }
       if (request.method === 'PUT') {
-        if (request.headers['if-match'] === currentTag && newTasks.has(path)) {
-          newTasks.set(path, body)
-          response.writeHead(204, { ETag: `"task-${++taskRevision}"` }).end()
+        if (current && request.headers['if-match'] === current.etag) {
+          response.writeHead(204, { ETag: saveTask(path, body) }).end()
           return
         }
         if (request.headers['if-none-match'] !== '*') {
@@ -214,14 +222,34 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
           response.writeHead(400).end()
           return
         }
-        newTasks.set(path, body)
+        const storedTag = saveTask(path, body)
         // The first reply fails after persisting the resource. A retry must
         // read the same task back instead of creating another one.
-        response.writeHead(503).end()
+        if (loseCreateReply) {
+          loseCreateReply = false
+          response.writeHead(503).end()
+        } else response.writeHead(201, { ETag: storedTag }).end()
+        return
+      }
+      if (request.method === 'MOVE') {
+        const destination = request.headers.destination && new URL(request.headers.destination)
+        if (!current || request.headers['if-match'] !== current.etag || request.headers.overwrite !== 'F' ||
+          !destination || destination.host !== request.headers.host || newTasks.has(destination.pathname)) {
+          response.writeHead(412).end()
+          return
+        }
+        nativeTaskMoves++
+        newTasks.delete(path)
+        response.writeHead(201, { ETag: saveTask(destination.pathname, current.body) }).end()
         return
       }
       if (request.method === 'DELETE') {
-        if (request.headers['if-match'] !== currentTag) { response.writeHead(412).end(); return }
+        if (refuseNextMoveRemoval && newTasks.size === 2 && path.startsWith(custom)) {
+          refuseNextMoveRemoval = false
+          response.writeHead(412).end()
+          return
+        }
+        if (!current || request.headers['if-match'] !== current.etag) { response.writeHead(412).end(); return }
         newTasks.delete(path)
         response.writeHead(204).end()
         return
@@ -356,9 +384,10 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
       await expect(created).toBeVisible()
       await expect(created).not.toBeChecked()
       expect(newTasks.size).toBe(1)
-      expect(Array.from(newTasks.values())[0]).toContain('DUE:20261201T150000Z')
-      expect(Array.from(newTasks.values())[0]).toContain('DESCRIPTION:Keep the checklist\\nConfirm the schedule')
-      expect(Array.from(newTasks.values())[0]).toContain('TRIGGER;RELATED=END:-PT15M')
+      const originalTask = Array.from(newTasks.values())[0].body
+      expect(originalTask).toContain('DUE:20261201T150000Z')
+      expect(originalTask).toContain('DESCRIPTION:Keep the checklist\\nConfirm the schedule')
+      expect(originalTask).toContain('TRIGGER;RELATED=END:-PT15M')
       await page.getByRole('button', { name: 'Sync now', exact: true }).click()
       await expect(created).toBeEnabled()
 
@@ -368,7 +397,9 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
       await expect(dialog.getByLabel('Task name')).toHaveValue('Review 群晖任务')
       await expect(dialog.getByLabel('Due date (optional)')).toHaveValue('2026-12-01')
       await expect(dialog.getByLabel('Due time (optional)')).toHaveValue('22:00')
-      await expect(dialog.getByLabel('Category', { exact: true })).toHaveValue(renamedCategory)
+      const taskCategory = dialog.getByRole('combobox', { name: 'Category', exact: true })
+      await expect(taskCategory).toHaveValue(origin + custom)
+      await taskCategory.selectOption({ label: 'Inbox test' })
       await expect(dialog.getByLabel('Task description')).toHaveValue('Keep the checklist\nConfirm the schedule')
       await expect(dialog.getByRole('combobox', { name: 'Reminders 1' })).toHaveValue('15')
       await dialog.getByLabel('Task name').fill('Edited 群晖任务')
@@ -379,14 +410,38 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
       await dialog.getByRole('button', { name: 'Add reminder' }).click()
       await expect(dialog.getByRole('combobox', { name: 'Reminders 1' })).toHaveValue('0')
       await dialog.screenshot({ path: testInfo.outputPath('task-editor-edit.png') })
+      refuseNextMoveRemoval = true
+      await dialog.getByRole('button', { name: 'Save task' }).click()
+      await expect(dialog.getByRole('alert')).toContainText('changed on the server')
+      expect(newTasks.size).toBe(1)
+      expect(Array.from(newTasks.keys())[0]).toContain(custom)
+      expect(Array.from(newTasks.values())[0].body).toBe(originalTask)
       await dialog.getByRole('button', { name: 'Save task' }).click()
       await expect(page.getByRole('checkbox', { name: 'Edited 群晖任务' })).toBeVisible()
-      expect(Array.from(newTasks.values())[0]).toContain('DUE:20261202T143500Z')
-      expect(Array.from(newTasks.values())[0]).toContain('DESCRIPTION:Updated notes')
-      expect(Array.from(newTasks.values())[0]).toMatch(/TRIGGER;RELATED=END:PT0[SH]/)
-      expect(Array.from(newTasks.values())[0]).not.toContain('-PT15M')
+      await expect(page.getByRole('button', { name: 'Inbox test', exact: true })).toHaveAttribute('aria-pressed', 'true')
+      expect(newTasks.size).toBe(1)
+      expect(Array.from(newTasks.keys())[0]).toContain(list)
+      const editedTask = Array.from(newTasks.values())[0].body
+      expect(editedTask).toContain(originalTask.match(/^UID:[^\r\n]+/m)![0])
+      expect(editedTask).toContain('DUE:20261202T143500Z')
+      expect(editedTask).toContain('DESCRIPTION:Updated notes')
+      expect(editedTask).toMatch(/TRIGGER;RELATED=END:PT0[SH]/)
+      expect(editedTask).not.toContain('-PT15M')
 
       const rowMenu = page.getByRole('button', { name: 'Task options for Edited 群晖任务' })
+      await rowMenu.click()
+      await page.getByRole('menuitem', { name: 'Edit', exact: true }).click()
+      dialog = page.getByRole('dialog', { name: 'Edit', exact: true })
+      await expect(dialog.getByRole('combobox', { name: 'Category', exact: true })).toHaveValue(origin + list)
+      await dialog.getByRole('combobox', { name: 'Category', exact: true }).selectOption({ label: renamedCategory })
+      await dialog.getByRole('button', { name: 'Save task' }).click()
+      await expect(dialog).toHaveCount(0)
+      await expect(page.getByRole('button', { name: renamedCategory, exact: true })).toHaveAttribute('aria-pressed', 'true')
+      expect(nativeTaskMoves).toBe(1)
+      expect(newTasks.size).toBe(1)
+      expect(Array.from(newTasks.keys())[0]).toContain(custom)
+      expect(Array.from(newTasks.values())[0].body).toBe(editedTask)
+
       await rowMenu.click()
       await page.getByRole('menuitem', { name: 'Delete task', exact: true }).click()
       dialog = page.getByRole('dialog', { name: 'Delete task', exact: true })

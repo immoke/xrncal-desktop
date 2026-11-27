@@ -1,5 +1,7 @@
-import { randomUUID } from 'node:crypto'
-import type { CalDavTask, CalDavTaskList, CreateTaskInput, TaskDeleteResult, TaskDetails, TaskUpdateResult } from '@shared/task-model'
+import { createHash, randomUUID } from 'node:crypto'
+import type {
+  CalDavTask, CalDavTaskList, CreateTaskInput, TaskDeleteResult, TaskDetails, TaskUpdateResult, UpdateTaskInput
+} from '@shared/task-model'
 import { readTaskIcs, writeNewTaskIcs, writeTaskCompletion, writeTaskDetails } from '../ics/task-ics'
 import { CalDavAdapter, CalDavQueryError, CalDavTaskResourceError, type CalDavItem } from './caldav-adapter'
 import type { CalDavCalendarDescriptor } from './caldav-discover'
@@ -14,6 +16,14 @@ interface ListedTask {
 }
 
 type TaskCopy = NonNullable<ReturnType<typeof readTaskIcs>>
+type TaskMatch = (task: CalDavTask | TaskCopy) => boolean
+
+function sameDetails(task: CalDavTask | TaskCopy, details: TaskDetails): boolean {
+  return task.title === details.title && task.dueDate === details.dueDate &&
+    (details.dueTime === undefined || task.dueTime === (details.dueTime ?? undefined)) &&
+    (details.description === undefined || (task.description ?? '') === details.description) &&
+    (details.reminderMinutes === undefined || details.reminderMinutes.join() === task.reminderMinutes?.join())
+}
 
 function matchesSnapshot(before: ListedTask, resource: CalDavItem & { ics: string }): boolean {
   return before.etag ? before.etag === resource.etag : before.ics.trimEnd() === resource.ics.trimEnd()
@@ -30,13 +40,14 @@ function inboxFallback(home: URL, username: string): string | undefined {
   return dav ? new URL(`${dav[1]}.php/${encodeURIComponent(username)}/home_todo/`, home).href : undefined
 }
 
-function listedTask(item: CalDavItem, id: string, listReadOnly: boolean): ListedTask | null {
+function listedTask(item: CalDavItem, id: string, listId: string, listReadOnly: boolean): ListedTask | null {
   if (!item.ics) return null
   const parsed = readTaskIcs(item.ics)
   if (!parsed) return null
   return {
     task: {
       id,
+      listId,
       title: parsed.title,
       dueDate: parsed.dueDate,
       dueTime: parsed.dueTime,
@@ -58,6 +69,26 @@ function isCollectionMember(href: string, list: URL): boolean {
   return item.origin === list.origin &&
     item.pathname.startsWith(`${list.pathname.replace(/\/+$/, '')}/`) &&
     item.pathname !== list.pathname
+}
+
+function resourceUrl(listId: string, name: string): string {
+  const url = new URL(listId)
+  url.pathname = `${url.pathname.replace(/\/+$/, '')}/${name}.ics`
+  return url.href
+}
+
+async function readTaskAt(adapter: CalDavAdapter, href: string) {
+  try {
+    return await adapter.readTaskResource(href)
+  } catch (error) {
+    if (error instanceof CalDavTaskResourceError && [404, 410].includes(error.status)) return null
+    throw error
+  }
+}
+
+function taskContent(ics: string): string {
+  // Saving the same edits again generates new bookkeeping timestamps.
+  return ics.replace(/\r\n/g, '\n').replace(/^(?:DTSTAMP|LAST-MODIFIED):[^\n]*\n/gm, '').trimEnd()
 }
 
 /** The renderer gets opaque task IDs. Only resources discovered by this
@@ -93,7 +124,7 @@ export class CalDavTaskSession {
       const seen = new Set<string>()
       for (const item of items) {
         if (!isCollectionMember(item.href, url) || seen.has(item.href)) continue
-        const row = listedTask(item, randomUUID(), descriptor.isReadOnly === true)
+        const row = listedTask(item, randomUUID(), href, descriptor.isReadOnly === true)
         if (!row) continue
         seen.add(item.href)
         snapshot.set(row.task.id, row)
@@ -123,9 +154,7 @@ export class CalDavTaskSession {
 
   async createTask(accountId: string, adapter: CalDavAdapter, home: URL, input: CreateTaskInput): Promise<CalDavTask> {
     this.requireEditableList(accountId, home, input.listId, false)
-    const listUrl = new URL(input.listId)
-    listUrl.pathname = `${listUrl.pathname.replace(/\/+$/, '')}/${input.requestId}.ics`
-    const href = listUrl.href
+    const href = resourceUrl(input.listId, input.requestId)
     const uid = `${input.requestId}@xrncal`
     const ics = writeNewTaskIcs(uid, input)
     const result = await adapter.putIcs(href, ics, { ifNoneMatch: '*' })
@@ -136,7 +165,7 @@ export class CalDavTaskSession {
     // A retry after a lost reply can find the task already saved under this UID.
     const snapshot = this.snapshots.get(accountId)
     const existing = snapshot && Array.from(snapshot.values()).find((item) => item.href === href)
-    const stored = listedTask(resource, existing?.task.id ?? input.requestId, false)
+    const stored = listedTask(resource, existing?.task.id ?? input.requestId, input.listId, false)
     if (!stored || stored.uid !== uid) throw new Error('Could not confirm the saved task')
     snapshot?.set(stored.task.id, stored)
     return stored.task
@@ -150,14 +179,72 @@ export class CalDavTaskSession {
   }
 
   async setDetails(
-    accountId: string, adapter: CalDavAdapter, accountOrigin: string, id: string, details: TaskDetails
+    accountId: string, adapter: CalDavAdapter, home: URL, id: string, input: UpdateTaskInput
   ): Promise<TaskUpdateResult> {
-    return this.updateTask(accountId, adapter, accountOrigin, id,
-      (task) => task.title === details.title && task.dueDate === details.dueDate &&
-        (details.dueTime === undefined || task.dueTime === (details.dueTime ?? undefined)) &&
-        (details.description === undefined || (task.description ?? '') === details.description) &&
-        (details.reminderMinutes === undefined || details.reminderMinutes.join() === task.reminderMinutes?.join()),
-      (copy) => writeTaskDetails(copy, details))
+    const snapshot = this.snapshots.get(accountId)
+    const before = snapshot?.get(id)
+    if (!snapshot || !before) return { status: 'changed' }
+    const matches: TaskMatch = (task) => sameDetails(task, input)
+    if (input.listId === before.task.listId) {
+      return this.updateTask(accountId, adapter, home.origin, id, matches, (copy) => writeTaskDetails(copy, input))
+    }
+    this.requireEditableList(accountId, home, input.listId, false)
+    const target = resourceUrl(input.listId, createHash('sha256').update(before.uid).digest('hex'))
+    const source = await this.readEditableTask(accountId, adapter, home.origin, id)
+    const confirm = async (): Promise<TaskUpdateResult> => {
+      const resource = await readTaskAt(adapter, target)
+      const saved = resource && listedTask(resource, id, input.listId, false)
+      if (!saved || saved.uid !== before.uid || !matches(saved.task)) return { status: 'unconfirmed' }
+      snapshot.set(id, saved)
+      return { status: 'saved', task: saved.task }
+    }
+    // A previous MOVE or DELETE may have succeeded before its reply was lost.
+    if (source.status === 'missing') return confirm()
+    if (source.status !== 'ready') return { status: source.status }
+    if (!matchesSnapshot(before, source.resource)) return { status: 'changed' }
+    const { etag, ics } = source.resource
+    if (!etag) return { status: 'readOnly' }
+    if (matches(source.live)) {
+      const moved = await adapter.moveTaskResource(before.href, target, etag)
+      if (moved === 'moved') return confirm()
+      if (moved === 'conflict') return { status: 'changed' }
+    }
+    // A server without MOVE, or a move with edits, needs the complete VTODO
+    // saved in the destination before we may remove its original.
+    const content = matches(source.live) ? ics : writeTaskDetails(source.live, input)
+    const result = await this.copyThenRemoveTask(adapter, before, etag, target, input.listId, content, matches)
+    if (result.status === 'saved') {
+      snapshot.set(id, result.saved)
+      return { status: 'saved', task: result.saved.task }
+    }
+    return result
+  }
+
+  private async copyThenRemoveTask(
+    adapter: CalDavAdapter, before: ListedTask, etag: string, target: string, listId: string,
+    content: string, matches: TaskMatch
+  ): Promise<{ status: 'saved'; saved: ListedTask } | { status: 'changed' | 'unconfirmed' }> {
+    const put = await adapter.putIcs(target, content, { ifNoneMatch: '*' })
+    const resource = await readTaskAt(adapter, target)
+    const saved = resource && listedTask(resource, before.task.id, listId, false)
+    if (!saved || saved.uid !== before.uid || !matches(saved.task)) {
+      return { status: put.conflict ? 'changed' : 'unconfirmed' }
+    }
+    const exact = taskContent(saved.ics) === taskContent(content)
+    if (put.conflict && !exact) return { status: 'changed' }
+    if (put.etag && saved.etag !== put.etag) return { status: 'changed' }
+
+    const removed = await adapter.deleteResource(before.href, etag, 'error').catch(() => false)
+    if (removed === true) return { status: 'saved', saved }
+    const remaining = await readTaskAt(adapter, before.href).catch(() => undefined)
+    if (remaining === null) return { status: 'saved', saved }
+    // Undo a confirmed copy only while the original is still known to
+    // exist. If its state is unknown, keep the data on both sides.
+    if (remaining && readTaskIcs(remaining.ics)?.uid === before.uid && saved.etag &&
+      (exact || saved.etag === put.etag)) {
+      await adapter.deleteResource(target, saved.etag, 'error').catch(() => false)
+    }
+    return { status: removed === 'conflict' ? 'changed' : 'unconfirmed' }
   }
 
   async deleteTask(accountId: string, adapter: CalDavAdapter, accountOrigin: string, id: string): Promise<TaskDeleteResult> {
@@ -182,10 +269,7 @@ export class CalDavTaskSession {
     const before = snapshot?.get(id)
     if (!snapshot || !before || new URL(before.href).origin !== accountOrigin) return { status: 'changed' as const }
     if (before.task.readOnly) return { status: 'readOnly' as const }
-    const resource = await adapter.readTaskResource(before.href).catch((error: unknown) => {
-      if (error instanceof CalDavTaskResourceError && [404, 410].includes(error.status)) return null
-      throw error
-    })
+    const resource = await readTaskAt(adapter, before.href)
     if (!resource) return { status: 'missing' as const }
     const live = readTaskIcs(resource.ics)
     if (!live || live.uid !== before.uid) return { status: 'changed' as const }
@@ -195,7 +279,7 @@ export class CalDavTaskSession {
 
   private async updateTask(
     accountId: string, adapter: CalDavAdapter, accountOrigin: string, id: string,
-    matches: (task: CalDavTask | TaskCopy) => boolean,
+    matches: TaskMatch,
     serialize: (copy: TaskCopy) => string
   ): Promise<TaskUpdateResult> {
     const source = await this.readEditableTask(accountId, adapter, accountOrigin, id)
@@ -210,7 +294,7 @@ export class CalDavTaskSession {
       confirmed = await adapter.readTaskResource(before.href)
     }
 
-    const saved = listedTask(confirmed, id, before.listReadOnly)
+    const saved = listedTask(confirmed, id, before.task.listId, before.listReadOnly)
     if (!saved || saved.uid !== before.uid || !matches(saved.task)) return { status: 'unconfirmed' }
     snapshot.set(id, saved)
     return { status: 'saved', task: saved.task }

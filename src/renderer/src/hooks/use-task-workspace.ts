@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CalDavTask, CalDavTaskList, CalDavTaskListChange, CreateTaskInput, TaskDetails, TaskServer, TaskServerInput } from '@shared/task-model'
+import type {
+  CalDavTask, CalDavTaskList, CalDavTaskListChange, CreateTaskInput, TaskServer, TaskServerInput, UpdateTaskInput
+} from '@shared/task-model'
 
 interface Snapshot {
   lists: CalDavTaskList[]
@@ -115,7 +117,7 @@ export function useTaskWorkspace(enabled: boolean) {
     }
   }
 
-  async function changeTask(taskId: string, details: TaskDetails | boolean | 'delete') {
+  async function changeTask(taskId: string, details: UpdateTaskInput | boolean | 'delete') {
     if (!id || !api || pending.current) throw new Error('Task server is busy')
     pending.current = true
     setSaving(true)
@@ -129,11 +131,16 @@ export function useTaskWorkspace(enabled: boolean) {
       setSnapshots((current) => {
         const active = current[id]
         if (!active) return current
-        const lists = active.lists.map((list) => ({
-          ...list,
-          tasks: saved ? list.tasks.map((item) => item.id === taskId ? saved : item)
-            : list.tasks.filter((item) => item.id !== taskId)
-        }))
+        const lists = active.lists.map((list) => {
+          const index = list.tasks.findIndex((item) => item.id === taskId)
+          if (saved?.listId === list.id) {
+            const tasks = [...list.tasks]
+            if (index < 0) tasks.push(saved)
+            else tasks[index] = saved
+            return { ...list, tasks }
+          }
+          return index < 0 ? list : { ...list, tasks: list.tasks.filter((item) => item.id !== taskId) }
+        })
         return { ...current, [id]: { lists } }
       })
       return status

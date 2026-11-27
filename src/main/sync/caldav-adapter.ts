@@ -402,6 +402,16 @@ ${refs.join('\n')}
     return { success: true, etag: res.headers.get('ETag') || undefined }
   }
 
+  async moveTaskResource(href: string, destination: string, etag: string): Promise<'moved' | 'conflict' | 'unsupported'> {
+    const res = await this.request(href, 'MOVE', undefined, {
+      Destination: destination, Overwrite: 'F', 'If-Match': etag
+    }, 'error')
+    if (res.status === 412) return 'conflict'
+    if (res.status === 405 || res.status === 501) return 'unsupported'
+    if (res.status === 201 || res.status === 204) return 'moved'
+    throw new Error(`CalDAV MOVE failed: HTTP ${res.status}`)
+  }
+
   /**
    * Delete an event from CalDAV collection via DELETE. `href` is where the
    * server keeps it; without one the UID-named address xrncal itself uses.

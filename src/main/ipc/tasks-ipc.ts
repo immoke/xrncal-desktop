@@ -105,8 +105,11 @@ export function registerTasksIpcHandlers(): void {
   })
   ipcMain.handle(UPDATE, (_event, accountId: unknown, id: unknown, input: unknown) => {
     if (typeof accountId !== 'string' || typeof id !== 'string') throw new Error('Invalid task update')
+    const details = taskDetails(input)
+    const { listId } = input as Record<string, unknown>
+    if (typeof listId !== 'string') throw new Error('Invalid task category')
     const { adapter, url } = connectedAdapter(accountId)
-    return session.setDetails(accountId, adapter, url.origin, id, taskDetails(input))
+    return session.setDetails(accountId, adapter, url, id, { ...details, listId })
   })
   ipcMain.handle(DELETE, (_event, accountId: unknown, id: unknown) => {
     if (typeof accountId !== 'string' || typeof id !== 'string') throw new Error('Invalid task deletion')

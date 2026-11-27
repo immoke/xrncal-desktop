@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DateTime } from 'luxon'
 import { Check, MoreHorizontal, Pencil, Plus, Trash2, X } from 'lucide-react'
-import type { CalDavTask, CalDavTaskList, CreateTaskInput, TaskDetails } from '@shared/task-model'
+import type { CalDavTask, CalDavTaskList, CreateTaskInput, UpdateTaskInput } from '@shared/task-model'
 import { formatClockTimeStr } from '@shared/time-format'
 import type { TaskWorkspace } from '../hooks/use-task-workspace'
 import { useDisplayPreferences } from '../context/DisplayPreferencesContext'
@@ -43,18 +43,18 @@ export default function TasksView({ workspace, dueOn, clearDate, onAddServer }: 
     setEditor(null)
   }
 
-  async function changeTask(task: CalDavTask, details: TaskDetails | 'delete') {
+  async function changeTask(task: CalDavTask, details: UpdateTaskInput | 'delete') {
     const result = await workspace.changeTask(task.id, details)
     if (result !== 'saved' && result !== 'deleted') throw new Error(t(`tasks.${result}`))
-    if (details !== 'delete' && dueOn && details.dueDate !== dueOn) clearDate()
+    if (details !== 'delete') {
+      if (workspace.selectedList && workspace.selectedList.id !== details.listId) workspace.selectList(details.listId)
+      if (dueOn && details.dueDate !== dueOn) clearDate()
+    }
     setEditor(null)
   }
 
   const writableLists = workspace.lists.filter((list) => list.canEdit)
   const defaultList = workspace.selectedList?.canEdit ? workspace.selectedList : writableLists[0]
-  const editingList = editor?.mode === 'edit'
-    ? workspace.lists.find((list) => list.tasks.some((task) => task.id === editor.task.id))
-    : undefined
   const scoped = (workspace.selectedList ? [workspace.selectedList] : workspace.lists).flatMap((list) =>
     list.tasks.filter((task) => !dueOn || task.dueDate === dueOn)
       .map((task) => ({ task, listName: list.name || t('tasks.inbox'), color: list.color }))
@@ -96,7 +96,8 @@ export default function TasksView({ workspace, dueOn, clearDate, onAddServer }: 
             {editor?.mode === 'create' && defaultList && <TaskEditorDialog mode="create"
               lists={writableLists} defaultListId={defaultList.id} defaultDueDate={dueOn ?? ''}
               onSave={createTask} onClose={() => setEditor(null)} />}
-            {editor?.mode === 'edit' && <TaskEditorDialog mode="edit" task={editor.task} listName={editingList?.name || t('tasks.inbox')}
+            {editor?.mode === 'edit' && <TaskEditorDialog mode="edit" task={editor.task} defaultListId={editor.task.listId}
+              lists={workspace.lists.filter((list) => list.canEdit || list.id === editor.task.listId)}
               onSave={(details) => changeTask(editor.task, details)} onClose={() => setEditor(null)} />}
             {editor?.mode === 'delete' && <TaskEditorDialog mode="delete" task={editor.task}
               onSave={() => changeTask(editor.task, 'delete')} onClose={() => setEditor(null)} />}

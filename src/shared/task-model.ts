@@ -1,5 +1,6 @@
 export interface CalDavTask extends Omit<TaskDetails, 'dueTime'> {
   id: string
+  listId: string
   dueTime?: string
   completed: boolean
   readOnly: boolean
@@ -22,6 +23,10 @@ export interface TaskDetails {
 export interface CreateTaskInput extends TaskDetails {
   /** Kept across retries of the same form submission. */
   requestId: string
+  listId: string
+}
+
+export interface UpdateTaskInput extends TaskDetails {
   listId: string
 }
 

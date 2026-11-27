@@ -28,8 +28,8 @@ import type { AppLocale, AppSettings } from './settings-contract'
 import type { OAuthClientForm, OAuthClientInfo, OAuthProvider } from './oauth-client'
 import type { HolidayCalendarOption } from './holiday-calendars'
 import type {
-  CalDavTask, CalDavTaskList, CalDavTaskListChange, CreateTaskInput, TaskDeleteResult, TaskDetails,
-  TaskServer, TaskServerInput, TaskUpdateResult
+  CalDavTask, CalDavTaskList, CalDavTaskListChange, CreateTaskInput, TaskDeleteResult,
+  TaskServer, TaskServerInput, TaskUpdateResult, UpdateTaskInput
 } from './task-model'
 
 export const IPC_CHANNELS = {
@@ -306,7 +306,7 @@ export interface XrncalAPI {
     removeServer: (id: string) => Promise<void>
     list: (accountId: string) => Promise<CalDavTaskList[]>
     create: (accountId: string, input: CreateTaskInput) => Promise<CalDavTask>
-    update: (accountId: string, id: string, input: TaskDetails) => Promise<TaskUpdateResult>
+    update: (accountId: string, id: string, input: UpdateTaskInput) => Promise<TaskUpdateResult>
     delete: (accountId: string, id: string) => Promise<TaskDeleteResult>
     setCompleted: (accountId: string, id: string, completed: boolean) => Promise<TaskUpdateResult>
     changeList: (accountId: string, change: CalDavTaskListChange) => Promise<void>

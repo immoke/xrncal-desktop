@@ -4,7 +4,7 @@ import { AlignLeft, Bell, Clock, Inbox, Minus, Plus, Type, X, type LucideIcon } 
 import { TIMED_REMINDER_PRESETS } from '@shared/reminders'
 import {
   MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_REMINDERS, MAX_TASK_TITLE_LENGTH,
-  type CalDavTask, type CalDavTaskList, type CreateTaskInput, type TaskDetails
+  type CalDavTask, type CalDavTaskList, type CreateTaskInput, type TaskDetails, type UpdateTaskInput
 } from '@shared/task-model'
 import { useDisplayPreferences } from '../context/DisplayPreferencesContext'
 import { useDialogFocus } from '../hooks/use-dialog-focus'
@@ -12,11 +12,16 @@ import { reminderLabel } from '../lib/reminder-labels'
 
 const fieldClass = 'gc-input w-full min-w-0 px-2.5 py-1.5 scheme-light dark:scheme-dark'
 
+interface CategoryChoices {
+  lists: CalDavTaskList[]
+  defaultListId: string
+}
+
 type TaskEditorDialogProps = {
   onClose: () => void
 } & (
-  | { mode: 'create'; lists: CalDavTaskList[]; defaultListId: string; defaultDueDate: string; onSave: (input: CreateTaskInput) => Promise<void> }
-  | { mode: 'edit'; task: CalDavTask; listName: string; onSave: (input: TaskDetails) => Promise<void> }
+  | (CategoryChoices & { mode: 'create'; defaultDueDate: string; onSave: (input: CreateTaskInput) => Promise<void> })
+  | (CategoryChoices & { mode: 'edit'; task: CalDavTask; onSave: (input: UpdateTaskInput) => Promise<void> })
   | { mode: 'delete'; task: CalDavTask; onSave: () => Promise<void> }
 )
 
@@ -26,7 +31,7 @@ export function TaskEditorDialog(props: TaskEditorDialogProps) {
   const { ref: formRef, onKeyDown: trapTab } = useDialogFocus<HTMLFormElement>()
   const [requestId] = useState(() => crypto.randomUUID())
   const [title, setTitle] = useState(props.mode === 'create' ? '' : props.task.title)
-  const [listId, setListId] = useState(props.mode === 'create' ? props.defaultListId : '')
+  const [listId, setListId] = useState(props.mode === 'delete' ? '' : props.defaultListId)
   const [dueDate, setDueDate] = useState(props.mode === 'create' ? props.defaultDueDate : props.task.dueDate ?? '')
   const [dueTime, setDueTime] = useState(props.mode === 'create' ? '' : props.task.dueTime ?? '')
   const [description, setDescription] = useState(props.mode === 'create' ? '' : props.task.description ?? '')
@@ -36,7 +41,7 @@ export function TaskEditorDialog(props: TaskEditorDialogProps) {
   const deleting = props.mode === 'delete'
   const heading = t(props.mode === 'create' ? 'tasks.createTask' : deleting ? 'tasks.deleteTask' : 'tasks.editTask')
   const canSave = !submitting && (deleting || (title.trim() && (dueDate || reminders.length === 0) &&
-    (props.mode !== 'create' || props.lists.some((list) => list.id === listId))))
+    props.lists.some((list) => list.id === listId)))
   const onClose = props.onClose
   const nextReminder = TIMED_REMINDER_PRESETS.find((minutes) => !reminders.includes(minutes))
 
@@ -60,7 +65,7 @@ export function TaskEditorDialog(props: TaskEditorDialogProps) {
         const previous = props.task.reminderMinutes ?? []
         const minutes = [...reminders].sort((a, b) => a - b)
         if (previous.join() !== minutes.join()) details.reminderMinutes = minutes
-        await props.onSave(details)
+        await props.onSave({ ...details, listId })
       } else await props.onSave({ requestId, listId, ...details, description, reminderMinutes: reminders })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -106,12 +111,10 @@ export function TaskEditorDialog(props: TaskEditorDialogProps) {
                 </div>
               </TaskField>
               <TaskField icon={Inbox}>
-                {props.mode === 'create' ? (
-                  <select className={fieldClass} aria-label={t('tasks.taskCategory')} value={listId}
-                    disabled={submitting} onChange={(event) => setListId(event.target.value)}>
-                    {props.lists.map((list) => <option key={list.id} value={list.id}>{list.name || t('tasks.inbox')}</option>)}
-                  </select>
-                ) : <input className={fieldClass} aria-label={t('tasks.taskCategory')} value={props.listName} readOnly />}
+                <select className={fieldClass} aria-label={t('tasks.taskCategory')} value={listId}
+                  disabled={submitting} onChange={(event) => setListId(event.target.value)}>
+                  {props.lists.map((list) => <option key={list.id} value={list.id}>{list.name || t('tasks.inbox')}</option>)}
+                </select>
               </TaskField>
               <TaskField icon={AlignLeft}>
                 <textarea className={`${fieldClass} resize-y`} rows={2} maxLength={MAX_TASK_DESCRIPTION_LENGTH}
