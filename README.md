@@ -130,7 +130,7 @@ OAuth 令牌与 CalDAV 密码通过 Electron `safeStorage` 加密保存。Linux 
 
 ## 安装
 
-可在 [GitHub 发行页](https://github.com/immoke/xrncal-desktop/releases/latest) 下载对应的平台版本。
+1.2.0.4 提供 [Windows x64 绿色版](https://github.com/immoke/xrncal-desktop/releases/tag/v1.2.0.4)。Windows 安装版和 Linux AppImage 可在 [全部发行版本](https://github.com/immoke/xrncal-desktop/releases) 中下载。
 
 - **Windows 10/11 安装版**。运行 `xrncal-Setup-<version>.exe`。未签名的安装包可能触发 SmartScreen 提示，可在确认文件来源后选择「更多信息」和「仍要运行」。
 - **Windows 绿色版**。将 `xrncal-<version>-windows-x64-portable.zip` 完整解压到可写目录，运行 `xrncal.exe`。将 `portable.flag` 和其他文件保留在原目录。首次启动会在同目录创建 `xrncal.sqlite`。
