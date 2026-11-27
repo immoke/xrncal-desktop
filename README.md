@@ -7,8 +7,8 @@
 本分支由 immoke 维护。xrncal 由 Xernnn 创建，采用 MIT 许可证。[原项目](https://github.com/Xernnn/xrncal-desktop) · [许可证](LICENSE)
 
 <p align="center">
-  <strong>面向 Windows 和 Linux 的本地优先桌面日历。</strong><br>
-  在同一窗口使用 Google 日历、Microsoft 365 和 CalDAV，支持农历日期和按农历年份重复的纪念日。
+  <strong>面向 Windows 和 Linux 的本地优先桌面日历与群晖任务管理工具。</strong><br>
+  在同一窗口使用 Google 日历、Microsoft 365 和 CalDAV，支持中越农历和按农历年份重复的纪念日。
 </p>
 
 <p align="center">
@@ -69,7 +69,7 @@ OAuth 令牌与 CalDAV 密码通过 Electron `safeStorage` 加密保存。Linux 
 | 农历 | 各视图显示农历日期，支持按农历年份重复 |
 | 数据 | 保存到本机 SQLite |
 | 离线 | 可查看、新建、修改和删除日程 |
-| 多账户 | 同时使用 Google、Microsoft Graph 和 CalDAV |
+| 多账户 | 同时使用 Google 日历、Microsoft 365 / Outlook.com 和 CalDAV |
 | 冲突处理 | 暂停相关上传，并显示冲突供用户处理 |
 | 只读日历 | 在数据访问层检查日历的写入权限 |
 
@@ -130,13 +130,13 @@ OAuth 令牌与 CalDAV 密码通过 Electron `safeStorage` 加密保存。Linux 
 
 ## 安装
 
-1.2.0.4 提供 [Windows x64 绿色版](https://github.com/immoke/xrncal-desktop/releases/tag/v1.2.0.4)。Windows 安装版和 Linux AppImage 可在 [全部发行版本](https://github.com/immoke/xrncal-desktop/releases) 中下载。
+1.2.0.4 提供 Windows x64 安装版、Windows x64 绿色版和 Linux x64 AppImage。 [下载与发行说明](https://github.com/immoke/xrncal-desktop/releases/tag/v1.2.0.4)
 
 - **Windows 10/11 安装版**。运行 `xrncal-Setup-<version>.exe`。未签名的安装包可能触发 SmartScreen 提示，可在确认文件来源后选择「更多信息」和「仍要运行」。
 - **Windows 绿色版**。将 `xrncal-<version>-windows-x64-portable.zip` 完整解压到可写目录，运行 `xrncal.exe`。将 `portable.flag` 和其他文件保留在原目录。首次启动会在同目录创建 `xrncal.sqlite`。
 - **Linux**。下载 `xrncal-<version>.AppImage`，通过 `chmod +x` 或文件属性赋予执行权限后打开。
 
-首次启动可选择语言、农历、节假日、开机启动及需要接入的日历。安装版可在「设置 → 常规 → 检查更新」管理更新设置。
+首次启动可选择语言、农历、节假日、开机启动及需要接入的日历。安装版可在「设置 → 常规 → 检查更新」管理更新设置。绿色版升级时先退出程序，再完整解压新包并保留原目录中的 `xrncal.sqlite`。
 
 ### 从源码构建
 
@@ -183,7 +183,7 @@ MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
 ```
 
-群晖任务在「任务」工作区添加服务器，填写群晖 Calendar 的 CalDAV 地址和账号。任务服务器与日历账户分别管理。
+从左上角切换到「任务」，点击「添加任务服务器」并填写群晖 Calendar 的 CalDAV 地址和账号。已添加的连接可在右上角「任务服务器」中管理。日历账户和任务服务器分别配置。
 
 在首次设置或「添加账户 → 节假日日历」中启用「中国日历（在线）」，即可订阅 ChinaCalendar。 [订阅来源](https://yangh9.github.io/ChinaCalendar/calendar.ics)
 
@@ -197,7 +197,7 @@ MICROSOFT_CLIENT_SECRET=
 
 - 可在「设置 → 常规」启用自动备份。应用每周备份到同目录的 `backups`，保留最近四份。
 - 在设置中可手动导出 SQLite 文件或从备份恢复。恢复前会保存当前数据。备份文件仅供本机用户读取，新版数据库应使用支持该数据库结构的客户端打开。
-- 「设置 → 显示日志文件」打开 `xrncal.log` 所在目录。日志记录启动、同步、备份和更新情况，日程正文与密码保存在各自的数据和凭据存储中。
+- 「设置 → 查看日志」打开 `xrncal.log` 所在目录。日志记录启动、同步、备份和更新情况，日程正文与密码保存在各自的数据和凭据存储中。
 - 从旧版 Gone Calendar 升级时，首次启动会自动复制旧数据，并保留旧配置目录。
 
 ---
@@ -207,6 +207,7 @@ MICROSOFT_CLIENT_SECRET=
 ### 日历
 
 - 日、周、月、年和列表视图，支持全天和多日日程、ISO 周数与第二时区。每周可从星期一、星期日或星期六开始。
+- 月视图与侧栏小日历可下拉选择年份、月份，或点击「回到今天」。简体中文界面按年月顺序显示日期。
 - 点击空白时间段、日程或「新建」可打开编辑器。支持右键操作、拖拽、调整时长和拖选时间范围。
 - 可配置时间对齐步长、编辑器时间列表的步长和默认日程时长。拖选新建时使用选中范围的时长。
 - 编辑器支持标题表情，可从英语和越南语标题读取日期、时间和重复规则。保留原文时可取消解析。
@@ -218,15 +219,16 @@ MICROSOFT_CLIENT_SECRET=
 - Google 日历通过 OAuth 回环和 PKCE 接入，Microsoft 365 与 Outlook.com 通过 Graph 接入，包括 Outlook 中移动、修改或取消的重复日程。
 - CalDAV 支持单个重复实例、提醒、参与者和日历颜色同步，并保留其他客户端存入日程中的字段。
 - 可回复邀请并订阅 `.ics` 或 `webcal://` 在线日历。订阅每六小时刷新。后台会根据窗口是否聚焦调整同步间隔。
+- 日历工作区的「立即同步」刷新所有账户和在线订阅，也可从下拉菜单单独选择同步来源。
 - 每个账户分别显示同步失败原因，可处理服务器冲突。重复提交创建请求时可使用同一日程识别信息防止重复。
 
 ### 群晖任务
 
-- 可配置多台群晖任务服务器，按到期日和分类筛选，单独同步某台服务器。
-- 在任务页右上角新建任务，可设置名称、分类、到期日期与时间、描述和提醒。
-- 任务分为「待办」和「已完成」。勾选完成或恢复待办时，状态同步到群晖。
-- 点击任务前的圆圈或双击任务行可以完成或恢复任务。每条任务右侧的「…」可打开编辑表单或删除任务。
-- 支持新建、改名、修改颜色及删除可编辑的任务分类。
+- 左上角可在「日历」和「任务」之间切换，点击 `<<` 或 `>>` 收起或展开侧栏。任务侧栏上方按到期日筛选，下方按分类筛选。
+- 可配置多台群晖任务服务器。「立即同步」刷新全部服务器，也可从下拉菜单指定一台。
+- 「待办」保留未完成任务，包括逾期任务。点击任务前的圆圈或双击任务行，可在「待办」和「已完成」之间切换并同步到群晖。
+- 点击右上角「新建任务」，或从任务右侧「…」菜单选择编辑或删除。新建和编辑表单可填写标题、分类、到期日期和时间、描述与提醒。
+- 编辑时，分类下拉默认选中当前分类。保存后可将任务移到同一服务器上的其他可写分类。侧栏可新建、改名、修改颜色或删除可编辑的分类。
 
 ### 桌面工作区
 
@@ -234,7 +236,7 @@ MICROSOFT_CLIENT_SECRET=
 - 支持浅色、深色和系统主题，可设置强调色、壁纸、模糊和暗度。
 - 搜索可忽略重音符号，标题和地点可从历史日程获得建议。
 - 每条日程可保留自己的时区和颜色，随 CalDAV 同步或 ICS 导出。支持导入、导出 ICS、备份及恢复 SQLite，也可断开账户并保留本地日程。
-- 支持简体中文、英语、越南语和中越农历。初始语言、时间格式及一周首日遵循系统设置。
+- 界面支持简体中文、英语和越南语。初始语言、日期与时间格式及一周首日参考系统设置。
 
 ### 快捷键
 
@@ -318,7 +320,7 @@ npm run build
 
 ## 许可证
 
-版权归 Xernnn 所有，项目采用 MIT 许可证。发行包的 `resources` 目录包含许可证和第三方声明。应用使用小米的 MiSans Latin 字体。 [MIT 许可证](LICENSE) · [第三方许可声明](THIRD-PARTY-NOTICES.md)
+Xernnn 创建了原项目并采用 MIT 许可证。本分支由 immoke 维护。发行包的 `resources` 目录保留原始版权声明、完整的 MIT 许可证和第三方许可声明。应用使用小米的 MiSans Latin 字体。 [MIT 许可证](LICENSE) · [第三方许可声明](THIRD-PARTY-NOTICES.md)
 
 <p align="center">
   <sub>Electron · React · TypeScript · Tailwind · SQLite · Windows &amp; Linux</sub>

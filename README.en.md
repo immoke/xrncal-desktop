@@ -9,8 +9,8 @@ Xernnn created the [original xrncal project](https://github.com/Xernnn/xrncal-de
 and released it under the [MIT License](LICENSE).
 
 <p align="center">
-  <strong>A local-first desktop calendar for Windows and Linux.</strong><br>
-  Google, Microsoft 365 and CalDAV in one window — with <em>Vietnamese lunar dates</em> and <em>lunar-year anniversaries</em>.
+  <strong>A local-first desktop calendar and Synology task manager for Windows and Linux.</strong><br>
+  Google Calendar, Microsoft 365, and CalDAV in one window, with Chinese and Vietnamese lunar dates and lunar-year anniversaries.
 </p>
 
 <p align="center">
@@ -146,13 +146,13 @@ The way xrncal looks and behaves follows One Calendar (Code Spark), which has no
 
 ## Install
 
-The fork's [Releases](https://github.com/immoke/xrncal-desktop/releases/latest) provide three builds.
+Version 1.2.0.4 provides a Windows x64 installer, a Windows x64 portable ZIP, and a Linux x64 AppImage. [Downloads and release notes](https://github.com/immoke/xrncal-desktop/releases/tag/v1.2.0.4)
 
-- **Windows 10/11:** `xrncal Setup <version>.exe`. Until the installer is code-signed, SmartScreen asks first: *More info → Run anyway*.
+- **Windows 10/11:** Run `xrncal-Setup-<version>.exe`. If SmartScreen prompts for an unsigned installer, verify the download source before choosing *More info → Run anyway*.
 - **Windows portable:** Extract the entire `xrncal-<version>-windows-x64-portable.zip` to a writable folder and run `xrncal.exe` directly. Keep `portable.flag` and the other files beside it. The first launch creates `xrncal.sqlite` in the same folder.
 - **Linux:** `xrncal-<version>.AppImage`. Make it executable (`chmod +x`, or *Properties → Allow executing*) and open it.
 
-The first launch walks you through three steps: language, a few basics (lunar dates, holidays, starting with the computer), and the calendars to bring in. Installed copies update themselves from new releases; *Settings → General → Check for updates* turns that off.
+The first launch lets you choose a language, lunar dates, holidays, startup behaviour, and calendars. Manage update checks for installed copies in *Settings → General → Check for updates*. To upgrade the portable build, quit xrncal, extract the complete ZIP, and keep the existing `xrncal.sqlite`.
 
 ### Build it yourself
 
@@ -213,6 +213,8 @@ MICROSOFT_CLIENT_SECRET=
 
 For a packaged build of your own, put the same lines in `xrncal.env` inside the data directory (below). Everything else - local calendars, CalDAV, iCloud, subscriptions - works without them. Registering OAuth clients, and the secrets the release workflow builds with: [`docs/deployment-guide.md`](docs/deployment-guide.md).
 
+For Synology tasks, switch to **Tasks** and choose **Add task server**. Enter the Synology Calendar CalDAV URL and sign-in. Saved task servers are managed separately from calendar accounts.
+
 ### Where your data lives
 
 | OS | Path |
@@ -236,6 +238,7 @@ If something goes wrong, **Settings → Show log file** opens the folder with `x
 
 **Calendar**
 - Five views: Day, Week, Month, Year, List — each shows one period per page; Year fits all twelve months on screen, tints each day with its events' colours and moves a year at a time
+- The month view and sidebar calendar have year and month selectors and a **Back to today** action
 - Click an empty slot or an event for the full editor, or Create in the header; right-click an event to edit, duplicate or delete it, or a day to start an event there
 - Drag and drop, edge resize, drag-select a range
 - Snap step of 15 / 30 / 60 minutes, and a separate step for the editor's time lists
@@ -251,11 +254,11 @@ If something goes wrong, **Settings → Show log file** opens the folder with `x
 </td>
 <td width="50%" valign="top">
 
-**Vietnam & languages**
-- Lunar dates in every view; mùng 1, rằm and Tết marked
+**Lunar dates, holidays, and languages**
+- Lunar dates in every view. Simplified Chinese uses the Chinese lunar calendar and Vietnamese uses the Vietnamese lunar calendar.
 - Anniversaries recurring by lunar year, leap months handled, with a reminder the day before - or just type "Giỗ ông 12/8 âm lịch"
-- Vietnamese and international holiday calendars, one click, extended by themselves as the years pass
-- Interface in Vietnamese, English, and Simplified Chinese - a new install follows your computer's language, clock and first day of the week
+- Enable Vietnamese holidays, international holidays, or **China Calendar (online)** during setup or from **Add account → Public holidays**. [ChinaCalendar feed](https://yangh9.github.io/ChinaCalendar/calendar.ics)
+- The interface supports Simplified Chinese, English, and Vietnamese. Initial language, date and time formats, and first day of the week follow system preferences.
 
 </td>
 </tr>
@@ -270,6 +273,7 @@ If something goes wrong, **Settings → Show log file** opens the folder with `x
 - Reminders and guest lists sync both ways, and so do CalDAV calendars' colours
 - Reply Yes / Maybe / No to invitations
 - Subscribe to any `.ics` / `webcal://` link, refreshed every six hours
+- **Sync now** refreshes all calendar accounts and online feeds. Use its menu to refresh a single source.
 - Adaptive polling: every 20 s while the window has focus, every 5 min otherwise
 - A resolution screen for 412 conflicts
 - CalDAV edits keep what other apps stored on the event
@@ -294,6 +298,14 @@ If something goes wrong, **Settings → Show log file** opens the folder with `x
 </td>
 </tr>
 </table>
+
+### Synology tasks
+
+- Switch between **Calendar** and **Tasks** from the top-left menu. The task sidebar filters by due date and category. Use `<<` and `>>` to collapse or expand it.
+- Connect one or more Synology task servers. Sync all configured servers or choose one from the sync menu.
+- Overdue tasks stay under **To do** until completed. Click the circle or double-click a task row to complete or reopen it and sync its status to Synology.
+- Select **New task**, or use the task's **…** menu to edit or delete it. The form includes a title, category, due date and time, description, and reminders.
+- The category dropdown starts on the task's current category. Saving can move the task to another writable category on the same server. Use the sidebar to create, rename, recolour, or delete editable categories.
 
 ### Keyboard shortcuts
 
@@ -382,7 +394,7 @@ npm run build          # production bundle -> out/
 
 Run a single test file: `npx vitest run tests/expand-occurrences.test.ts`, or one test with `-t "<name>"`. `test:caldav` starts its own Radicale on a spare port; point `XRNCAL_RADICALE` at the `radicale` executable if it is not on your `PATH` (a virtualenv's, say). CI runs lint + typecheck + test + build on every push and pull request, drives the built app with Playwright under `xvfb-run`, and syncs with a real Radicale server.
 
-Releases: bump `version` in `package.json`, commit, then push a `v<version>` tag. `.github/workflows/release.yml` builds the Windows installer and the Linux AppImage into a draft GitHub release; nothing reaches users until that draft is published.
+For a release, set the internal `version` and public `shortVersion` in `package.json`. The `v<shortVersion>` tag triggers the workflow that builds the Windows installer, Windows portable ZIP, and Linux AppImage. [Release workflow](.github/workflows/release.yml)
 
 `site/` is the project's homepage and privacy policy, which Google's OAuth consent screen asks for. `.github/workflows/pages.yml` publishes it to [GitHub Pages](https://xernnn.github.io/xrncal-desktop/) when it changes on `main`.
 
@@ -399,7 +411,7 @@ Releases: bump `version` in `package.json`, commit, then push a `v<version>` tag
 
 ## Licence
 
-[MIT](LICENSE) © Xernnn.
+Xernnn created the original project and released it under the [MIT License](LICENSE). This fork is maintained by immoke.
 
 The installer, portable ZIP, and AppImage include the project's MIT license and
 the [third-party notices](THIRD-PARTY-NOTICES.md) in the application's `resources`
@@ -410,3 +422,5 @@ directory. The application uses MiSans Latin by Xiaomi.
 <p align="center">
   <sub>Electron · React · TypeScript · Tailwind · SQLite · Windows &amp; Linux</sub>
 </p>
+
+[Changelog in Simplified Chinese](CHANGELOG.immoke.md)

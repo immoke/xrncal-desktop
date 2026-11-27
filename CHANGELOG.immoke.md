@@ -21,7 +21,7 @@
 ### 文档与下载
 
 - 默认 README 使用简体中文，保留英文和越南语入口，并在文末链接到本页。
-- 提供 Windows x64 绿色 ZIP。完整解压后运行 `xrncal.exe`。覆盖升级前请退出程序，并保留原目录中的 `xrncal.sqlite`。 [发行说明](docs/releases/1.2.0.4.md) · [GitHub 发行页](https://github.com/immoke/xrncal-desktop/releases/tag/v1.2.0.4)
+- 提供 Windows x64 安装版、Windows x64 绿色 ZIP 和 Linux x64 AppImage。绿色版完整解压后运行 `xrncal.exe`。覆盖升级前请退出程序，并保留原目录中的 `xrncal.sqlite`。 [发行说明](docs/releases/1.2.0.4.md) · [GitHub 发行页](https://github.com/immoke/xrncal-desktop/releases/tag/v1.2.0.4)
 
 ## 1.2.0.3
 

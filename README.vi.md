@@ -9,8 +9,8 @@ Xernnn là tác giả của [dự án xrncal gốc](https://github.com/Xernnn/xr
 được phát hành theo [giấy phép MIT](LICENSE).
 
 <p align="center">
-  <strong>Lịch desktop local-first cho Windows và Linux.</strong><br>
-  Google, Microsoft 365 và CalDAV trong một cửa sổ — kèm <em>lịch âm</em> và <em>giỗ theo năm âm</em>.
+  <strong>Ứng dụng lịch và quản lý công việc Synology cho Windows và Linux, ưu tiên lưu dữ liệu trên máy.</strong><br>
+  Google Calendar, Microsoft 365 và CalDAV trong cùng một cửa sổ, hỗ trợ âm lịch Việt Nam, âm lịch Trung Quốc và ngày kỷ niệm lặp theo năm âm.
 </p>
 
 <p align="center">
@@ -146,13 +146,13 @@ Giao diện và cách dùng của xrncal theo One Calendar (Code Spark), app kh�
 
 ## Cài đặt
 
-Trang [Releases của bản fork](https://github.com/immoke/xrncal-desktop/releases/latest) cung cấp ba gói.
+Phiên bản 1.2.0.4 có bộ cài Windows x64, gói ZIP Windows x64 chạy trực tiếp và AppImage Linux x64. [Tải xuống và xem ghi chú phát hành](https://github.com/immoke/xrncal-desktop/releases/tag/v1.2.0.4)
 
-- **Windows 10/11:** `xrncal Setup <phiên bản>.exe`. Khi bộ cài chưa được ký số, SmartScreen sẽ hỏi trước: *More info → Run anyway*.
+- **Windows 10/11.** Chạy `xrncal-Setup-<phiên bản>.exe`. Nếu SmartScreen cảnh báo bộ cài chưa được ký số, hãy kiểm tra nguồn tải trước khi chọn *More info → Run anyway*.
 - **Windows portable:** Giải nén toàn bộ `xrncal-<phiên bản>-windows-x64-portable.zip` vào thư mục có quyền ghi rồi chạy trực tiếp `xrncal.exe`. Giữ `portable.flag` và các tệp còn lại cạnh tệp EXE. Lần chạy đầu tạo `xrncal.sqlite` trong cùng thư mục.
 - **Linux:** `xrncal-<phiên bản>.AppImage`. Cho phép chạy (`chmod +x`, hoặc *Properties → Allow executing*) rồi mở.
 
-Lần mở đầu tiên có ba bước ngắn: ngôn ngữ, vài thiết lập cơ bản (âm lịch, ngày lễ, khởi động cùng máy) và các lịch muốn thêm vào. Bản đã cài tự cập nhật khi có release mới; tắt ở *Cài đặt → Chung → Kiểm tra bản cập nhật*.
+Lần đầu mở ứng dụng, bạn có thể chọn ngôn ngữ, âm lịch, ngày lễ, khởi động cùng máy và lịch muốn thêm. Quản lý việc kiểm tra bản cập nhật trong *Cài đặt → Chung → Kiểm tra bản cập nhật*. Khi nâng cấp bản portable, hãy thoát xrncal, giải nén toàn bộ gói mới và giữ tệp `xrncal.sqlite` hiện có.
 
 ### Tự build
 
@@ -213,6 +213,8 @@ MICROSOFT_CLIENT_SECRET=
 
 Với bản tự đóng gói, đặt cùng nội dung đó vào `xrncal.env` trong thư mục dữ liệu (xem bên dưới). Mọi thứ khác — lịch trên máy, CalDAV, iCloud, lịch đăng ký bằng liên kết — vẫn chạy mà không cần chúng. Đăng ký OAuth client và các secret mà workflow release dùng để build: [`docs/deployment-guide.md`](docs/deployment-guide.md).
 
+Để đồng bộ công việc Synology, chuyển sang **Việc cần làm** và chọn **Thêm máy chủ công việc**. Nhập địa chỉ CalDAV của Synology Calendar và thông tin đăng nhập. Máy chủ công việc được quản lý riêng với tài khoản lịch.
+
 ### Dữ liệu nằm ở đâu
 
 | Hệ | Đường dẫn |
@@ -236,6 +238,7 @@ Khi có sự cố, **Cài đặt → Mở tệp nhật ký** mở thư mục ch�
 
 **Lịch**
 - 5 view: Ngày, Tuần, Tháng, Năm, Danh sách — mỗi trang một kỳ; Năm vừa đủ mười hai tháng trên màn hình, tô mỗi ngày theo màu sự kiện và chuyển từng năm một
+- Chọn tháng và năm trong chế độ xem Tháng hoặc lịch ở thanh bên. Chọn **Về hôm nay** để quay lại ngày hiện tại.
 - Bấm vào ô trống hoặc sự kiện để mở cửa sổ sự kiện đầy đủ, hoặc nút Tạo trên thanh tiêu đề; chuột phải vào sự kiện để sửa, nhân bản hoặc xoá, hoặc vào một ngày để tạo sự kiện ở đó
 - Kéo-thả, resize mép, quét chọn khoảng giờ
 - Bước snap 15 / 30 / 60 phút, và bước riêng cho danh sách giờ trong cửa sổ sự kiện
@@ -251,11 +254,11 @@ Khi có sự cố, **Cài đặt → Mở tệp nhật ký** mở thư mục ch�
 </td>
 <td width="50%" valign="top">
 
-**Việt Nam & ngôn ngữ**
-- Âm lịch trên mọi view; đánh dấu mùng 1, rằm và Tết
+**Âm lịch, ngày lễ và ngôn ngữ**
+- Âm lịch hiển thị ở mọi chế độ xem. Giao diện tiếng Việt dùng âm lịch Việt Nam, giao diện tiếng Trung giản thể dùng âm lịch Trung Quốc.
 - Giỗ lặp theo năm âm, xử lý tháng nhuận, nhắc trước một ngày - hoặc chỉ cần gõ "Giỗ ông 12/8 âm lịch"
-- Lịch lễ Việt Nam và quốc tế, subscribe 1 cú bấm, tự kéo dài khi sang năm mới
-- Giao diện tiếng Việt và English — bản mới cài theo ngôn ngữ, kiểu giờ và ngày đầu tuần của máy
+- Bật **Lễ Tết Việt Nam**, **Lễ Quốc tế** hoặc **Lịch Trung Quốc (trực tuyến)** khi thiết lập lần đầu hoặc trong **Thêm tài khoản → Ngày lễ**. [Nguồn ChinaCalendar](https://yangh9.github.io/ChinaCalendar/calendar.ics)
+- Giao diện hỗ trợ tiếng Việt, tiếng Anh và tiếng Trung giản thể. Ngôn ngữ, định dạng ngày giờ và ngày đầu tuần ban đầu theo thiết lập hệ thống.
 
 </td>
 </tr>
@@ -270,6 +273,7 @@ Khi có sự cố, **Cài đặt → Mở tệp nhật ký** mở thư mục ch�
 - Nhắc nhở và danh sách khách đồng bộ hai chiều, màu của lịch CalDAV cũng vậy
 - Trả lời lời mời: Có / Có thể / Không
 - Đăng ký lịch từ bất kỳ liên kết `.ics` / `webcal://`, làm mới mỗi sáu giờ
+- Đồng bộ tất cả tài khoản lịch và lịch trực tuyến, hoặc chọn một nguồn từ danh sách đồng bộ.
 - Poll thích ứng: 20 giây một lần khi cửa sổ đang được dùng, 5 phút một lần khi không
 - Bảng xử lý xung đột 412
 - Sửa sự kiện CalDAV vẫn giữ những gì ứng dụng khác đã lưu
@@ -294,6 +298,14 @@ Khi có sự cố, **Cài đặt → Mở tệp nhật ký** mở thư mục ch�
 </td>
 </tr>
 </table>
+
+### Công việc Synology
+
+- Chuyển giữa **Lịch** và **Việc cần làm** bằng menu ở góc trên bên trái. Thanh bên lọc công việc theo ngày đến hạn và danh mục. Dùng `<<` và `>>` để thu gọn hoặc mở thanh bên.
+- Kết nối một hoặc nhiều máy chủ công việc Synology. Có thể đồng bộ tất cả máy chủ hoặc chọn một máy chủ từ menu đồng bộ.
+- Công việc quá hạn vẫn ở mục **Chưa hoàn thành**. Bấm vòng tròn hoặc bấm đúp vào công việc để đánh dấu hoàn thành hoặc mở lại, rồi ứng dụng đồng bộ trạng thái với Synology.
+- Chọn **Tạo tác vụ** hoặc mở menu **…** để sửa hay xóa. Biểu mẫu có tiêu đề, danh mục, ngày giờ đến hạn, mô tả và lời nhắc.
+- Khi sửa, danh sách thả xuống chọn sẵn danh mục hiện tại. Khi lưu, có thể chuyển tác vụ sang danh mục khác có quyền ghi trên cùng máy chủ. Dùng thanh bên để tạo, đổi tên, đổi màu hoặc xóa danh mục có thể chỉnh sửa.
 
 ### Phím tắt
 
@@ -382,7 +394,7 @@ npm run build          # bundle production -> out/
 
 Chạy một file test: `npx vitest run tests/expand-occurrences.test.ts`, hoặc một test với `-t "<tên>"`. `test:caldav` tự chạy một Radicale trên cổng trống; đặt `XRNCAL_RADICALE` trỏ tới file `radicale` nếu nó không nằm trong `PATH` (của một virtualenv chẳng hạn). CI chạy lint + typecheck + test + build trên mọi push và PR, chạy thử bản build bằng Playwright dưới `xvfb-run`, và đồng bộ với một máy chủ Radicale thật.
 
-Release: tăng `version` trong `package.json`, commit, rồi push tag `v<phiên bản>`. `.github/workflows/release.yml` build bộ cài Windows và AppImage Linux vào một bản release nháp trên GitHub; chưa đến tay ai cho tới khi bản nháp đó được publish.
+Khi phát hành, đặt `version` nội bộ và `shortVersion` công khai trong `package.json`. Tag `v<shortVersion>` chạy quy trình tạo bộ cài Windows, ZIP portable cho Windows và AppImage Linux. [Quy trình phát hành](.github/workflows/release.yml)
 
 `site/` là trang chủ và chính sách quyền riêng tư của dự án, thứ mà màn hình đồng ý OAuth của Google yêu cầu. `.github/workflows/pages.yml` đăng nó lên [GitHub Pages](https://xernnn.github.io/xrncal-desktop/) mỗi khi nó đổi trên `main`.
 
@@ -399,7 +411,7 @@ Release: tăng `version` trong `package.json`, commit, rồi push tag `v<phiên 
 
 ## Giấy phép
 
-[MIT](LICENSE) © Xernnn.
+Xernnn tạo dự án gốc và phát hành theo [giấy phép MIT](LICENSE). Bản fork này do immoke duy trì.
 
 Bộ cài Windows, tệp ZIP portable và AppImage đều kèm giấy phép MIT của dự án và
 [thông báo giấy phép bên thứ ba](THIRD-PARTY-NOTICES.md) trong thư mục `resources`
@@ -410,3 +422,5 @@ của ứng dụng. Ứng dụng sử dụng phông chữ MiSans Latin của Xia
 <p align="center">
   <sub>Electron · React · TypeScript · Tailwind · SQLite · Windows &amp; Linux</sub>
 </p>
+
+[Nhật ký thay đổi bằng tiếng Trung giản thể](CHANGELOG.immoke.md)
