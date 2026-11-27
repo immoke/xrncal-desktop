@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { launchApp, newProfile } from './app'
+import { CHINA_CALENDAR_URL } from '../src/shared/holiday-calendars'
 
 // What a new user does in the first five minutes: gets welcomed, makes an
 // event by clicking the grid, opens it, right-clicks it.
@@ -42,6 +43,48 @@ test('a fresh profile opens on the welcome, which can be finished without an acc
     await welcome.getByRole('button', { name: 'Not now' }).click()
     await expect(welcome).toBeHidden()
     expect(await page.evaluate(() => window.xrncal.settings.get('welcomeDone'))).toBe(true)
+    expect(running.errors).toEqual([])
+  } finally {
+    await running.close()
+  }
+})
+
+test('China Calendar can be enabled during setup and managed under Public holidays', async () => {
+  const running = await launchApp({ welcome: true })
+  try {
+    const { page, app } = running
+    await app.evaluate((_electron, url) => {
+      const realFetch = globalThis.fetch
+      globalThis.fetch = (input, init) => input === url ? Promise.resolve(new Response([
+        'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//xrncal//Holiday test//EN',
+        'BEGIN:VEVENT', 'UID:china-feed-test', 'DTSTAMP:20261001T000000Z',
+        'DTSTART;VALUE=DATE:20261001', 'SUMMARY:China Calendar fixture', 'END:VEVENT', 'END:VCALENDAR', ''
+      ].join('\r\n'), { headers: { 'Content-Type': 'text/calendar' } })) : realFetch(input, init)
+    }, CHINA_CALENDAR_URL)
+    await page.getByRole('button', { name: 'English', exact: true }).click()
+    const welcome = page.getByRole('dialog', { name: 'Welcome to xrncal' })
+    await expect(welcome).toBeVisible()
+    await welcome.getByRole('button', { name: 'Next', exact: true }).click()
+    const setupOption = welcome.getByRole('button', { name: 'China Calendar (online)', exact: true })
+    await expect(welcome.getByRole('button', { name: 'Vietnamese holidays & Tết' })).toBeVisible()
+    await setupOption.click()
+    await expect(setupOption).toHaveAttribute('aria-pressed', 'true')
+    expect(await page.evaluate(async (url) => {
+      await Promise.all([window.xrncal.holidays.subscribe('china'), window.xrncal.holidays.subscribe('china')])
+      return (await window.xrncal.calendars.list()).filter((calendar) => calendar.subscriptionUrl === url).length
+    }, CHINA_CALENDAR_URL)).toBe(1)
+    await welcome.getByRole('button', { name: 'Next', exact: true }).click()
+    await welcome.getByRole('button', { name: 'Not now' }).click()
+    await expect(welcome).toBeHidden()
+    await page.getByRole('button', { name: 'Add account', exact: true }).first().click()
+    await page.getByRole('button', { name: 'Public holidays', exact: true }).click()
+    const manageOption = page.getByRole('button', { name: 'China Calendar (online)', exact: true })
+    await expect(manageOption).toHaveAttribute('aria-pressed', 'true')
+    await manageOption.click()
+    await expect(manageOption).toHaveAttribute('aria-pressed', 'false')
+    await manageOption.click()
+    await expect(manageOption).toHaveAttribute('aria-pressed', 'true')
+    expect(await page.evaluate(async () => (await window.xrncal.events.search('China Calendar fixture')).length)).toBe(1)
     expect(running.errors).toEqual([])
   } finally {
     await running.close()

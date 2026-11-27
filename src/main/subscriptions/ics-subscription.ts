@@ -128,13 +128,22 @@ function storeFeed(db: ISqliteDatabase, calendarId: string, ics: string): number
 
 /** Subscribe to a feed. It is fetched once before anything is created, so a
  *  bad link is refused rather than leaving an empty calendar behind. */
-export async function addSubscription(db: ISqliteDatabase, rawUrl: string, name?: string): Promise<Calendar> {
+export async function addSubscription(
+  db: ISqliteDatabase, rawUrl: string, name?: string, options?: { reuseExisting: boolean }
+): Promise<Calendar> {
   const url = normaliseSubscriptionUrl(rawUrl)
+  const calendarsRepo = new CalendarsRepo(db)
+  const findExisting = () => options?.reuseExisting
+    ? calendarsRepo.listCalendars().find((calendar) => calendar.subscriptionUrl === url)
+    : undefined
+  const beforeFetch = findExisting()
+  if (beforeFetch) return beforeFetch
   const ics = await fetchFeed(url)
   // Parse before creating anything, for the same reason.
   parseIcsContent(ics, 'probe')
 
-  const calendarsRepo = new CalendarsRepo(db)
+  const duringFetch = findExisting()
+  if (duringFetch) return duringFetch
   const calendar = calendarsRepo.createCalendar({
     name: name?.trim() || feedName(ics) || new URL(url).hostname,
     color: SUBSCRIPTION_COLOR,

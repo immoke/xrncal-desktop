@@ -6,6 +6,19 @@ export interface CalDavTask {
   readOnly: boolean
 }
 
+export const MAX_TASK_TITLE_LENGTH = 255
+
+export interface TaskDetails {
+  title: string
+  dueDate?: string
+}
+
+export interface CreateTaskInput extends TaskDetails {
+  /** Kept across retries of the same form submission. */
+  requestId: string
+  listId: string
+}
+
 export interface CalDavTaskList {
   id: string
   name: string
@@ -40,3 +53,5 @@ export interface TaskServerInput extends Omit<TaskServer, 'id'> {
 export type TaskUpdateResult =
   | { status: 'saved'; task: CalDavTask }
   | { status: 'changed' | 'readOnly' | 'unconfirmed' }
+
+export type TaskDeleteResult = 'deleted' | 'changed' | 'readOnly'

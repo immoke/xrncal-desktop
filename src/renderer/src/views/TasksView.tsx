@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DateTime } from 'luxon'
-import { X } from 'lucide-react'
-import type { CalDavTask, CalDavTaskList } from '@shared/task-model'
+import { Check, MoreHorizontal, Pencil, Plus, Trash2, X } from 'lucide-react'
+import type { CalDavTask, CalDavTaskList, CreateTaskInput, TaskDetails } from '@shared/task-model'
 import type { TaskWorkspace } from '../hooks/use-task-workspace'
+import { TaskEditorDialog } from '../components/TaskEditorDialog'
+import { ContextMenu } from '../components/ui'
+
+type TaskEditor = { mode: 'create' } | { mode: 'edit' | 'delete'; task: CalDavTask }
 
 export default function TasksView({ workspace, dueOn, clearDate, onAddServer }: {
   workspace: TaskWorkspace
@@ -13,18 +17,38 @@ export default function TasksView({ workspace, dueOn, clearDate, onAddServer }: 
 }) {
   const { t, i18n } = useTranslation()
   const [showCompleted, setShowCompleted] = useState(false)
+  const [editor, setEditor] = useState<TaskEditor | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; task: CalDavTask } | null>(null)
   const [error, setError] = useState<{ message: string; lists: CalDavTaskList[] } | null>(null)
 
   async function toggle(task: CalDavTask) {
+    if (task.readOnly || workspace.busy) return
     setError(null)
     try {
-      const result = await workspace.toggle(task)
+      const result = await workspace.changeTask(task.id, !task.completed)
       if (result && result !== 'saved') setError({ message: t(`tasks.${result}`), lists: workspace.lists })
     } catch (error) {
       setError({ message: error instanceof Error ? error.message : String(error), lists: workspace.lists })
     }
   }
 
+  async function createTask(input: CreateTaskInput) {
+    const task = await workspace.createTask(input)
+    if (workspace.selectedList && workspace.selectedList.id !== input.listId) workspace.selectList(input.listId)
+    if (dueOn && task.dueDate !== dueOn) clearDate()
+    setShowCompleted(false)
+    setEditor(null)
+  }
+
+  async function changeTask(task: CalDavTask, details: TaskDetails | 'delete') {
+    const result = await workspace.changeTask(task.id, details)
+    if (result !== 'saved' && result !== 'deleted') throw new Error(t(`tasks.${result}`))
+    if (details !== 'delete' && dueOn && details.dueDate !== dueOn) clearDate()
+    setEditor(null)
+  }
+
+  const writableLists = workspace.lists.filter((list) => list.canEdit)
+  const defaultList = workspace.selectedList?.canEdit ? workspace.selectedList : writableLists[0]
   const scoped = (workspace.selectedList ? [workspace.selectedList] : workspace.lists).flatMap((list) =>
     list.tasks.filter((task) => !dueOn || task.dueDate === dueOn)
       .map((task) => ({ task, listName: list.name || t('tasks.inbox'), color: list.color }))
@@ -50,12 +74,32 @@ export default function TasksView({ workspace, dueOn, clearDate, onAddServer }: 
                   {t('tasks.completed')} <span className="ml-1 tabular-nums text-secondary">{completedCount}</span>
                 </button>
               </div>
-              {dueOn && (
-                <button type="button" className="gc-btn" onClick={clearDate} title={t('tasks.clearDate')} aria-label={t('tasks.clearDate')}>
-                  {dateLabel(dueOn)} <X className="h-3.5 w-3.5" />
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {dueOn && (
+                  <button type="button" className="gc-btn" onClick={clearDate} title={t('tasks.clearDate')} aria-label={t('tasks.clearDate')}>
+                    {dateLabel(dueOn)} <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button type="button" className="gc-btn-primary" disabled={workspace.busy || !defaultList}
+                  onClick={() => setEditor({ mode: 'create' })}>
+                  <Plus className="h-4 w-4" />
+                  {t('tasks.createTask')}
                 </button>
-              )}
+              </div>
             </div>
+            {editor?.mode === 'create' && defaultList && <TaskEditorDialog mode="create"
+              lists={writableLists} defaultListId={defaultList.id} defaultDueDate={dueOn ?? ''}
+              onSave={createTask} onClose={() => setEditor(null)} />}
+            {editor?.mode === 'edit' && <TaskEditorDialog mode="edit" task={editor.task}
+              onSave={(details) => changeTask(editor.task, details)} onClose={() => setEditor(null)} />}
+            {editor?.mode === 'delete' && <TaskEditorDialog mode="delete" task={editor.task}
+              onSave={() => changeTask(editor.task, 'delete')} onClose={() => setEditor(null)} />}
+            <ContextMenu at={menu} onClose={() => setMenu(null)} entries={menu ? [
+              { label: t('tasks.editTask'), icon: <Pencil className="h-3.5 w-3.5" />,
+                disabled: menu.task.readOnly || workspace.busy, onSelect: () => setEditor({ mode: 'edit', task: menu.task }) },
+              { label: t('tasks.deleteTask'), icon: <Trash2 className="h-3.5 w-3.5" />, danger: true,
+                disabled: menu.task.readOnly || workspace.busy, onSelect: () => setEditor({ mode: 'delete', task: menu.task }) }
+            ] : []} />
             {feedback && <p role="alert" className="my-3 rounded-md border border-hairline px-3 py-2 text-sm text-primary">{feedback}</p>}
             {workspace.loading && <p role="status" className="py-8 text-center text-sm text-secondary">{t('tasks.loading')}</p>}
             {!workspace.loading && !feedback && shown.length === 0 && (
@@ -70,17 +114,30 @@ export default function TasksView({ workspace, dueOn, clearDate, onAddServer }: 
                   const title = task.title || t('tasks.untitled')
                   const due = task.dueDate ? dateLabel(task.dueDate) : ''
                   return (
-                    <li key={task.id}>
-                      <label className="flex min-h-12 items-center gap-3 rounded-md px-2.5 py-2 hover:bg-hover" title={task.readOnly ? t('tasks.readOnly') : undefined}>
-                        <input type="checkbox" className="h-4 w-4 shrink-0 accent-[var(--accent-color)] disabled:opacity-50"
-                          aria-label={title} checked={task.completed} disabled={workspace.busy || task.readOnly} onChange={() => void toggle(task)} />
+                    <li key={task.id} className="flex min-h-12 items-center gap-3 rounded-md px-2.5 py-2 hover:bg-hover"
+                      title={task.readOnly ? t('tasks.readOnly') : undefined} onDoubleClick={() => void toggle(task)}>
+                        <button type="button" role="checkbox" aria-label={title} aria-checked={task.completed}
+                          className="gc-icon-btn h-7 w-7 shrink-0" disabled={workspace.busy || task.readOnly}
+                          onClick={(event) => { if (event.detail < 2) void toggle(task) }}
+                          onDoubleClick={(event) => event.stopPropagation()}>
+                          <span aria-hidden="true" className={`grid h-4 w-4 place-items-center rounded-full border ${task.completed ? 'border-accent bg-accent text-white' : 'border-current text-muted'}`}>
+                            {task.completed && <Check className="h-3 w-3" />}
+                          </span>
+                        </button>
                         <span className={`min-w-0 flex-1 truncate text-sm ${task.completed ? 'text-secondary line-through' : 'text-primary'}`} title={title}>{title}</span>
                         {!workspace.selectedList && <span className="inline-flex max-w-28 items-center gap-1.5 text-xs text-secondary">
                           {color && <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: color }} />}
                           <span className="truncate">{listName}</span>
                         </span>}
                         {due && <span className="shrink-0 text-xs text-secondary">{overdue ? t('tasks.overdue', { date: due }) : due}</span>}
-                      </label>
+                        <button type="button" className="gc-icon-btn h-7 w-7 shrink-0" aria-haspopup="menu"
+                          aria-expanded={menu?.task.id === task.id} aria-label={t('tasks.taskOptions', { name: title })}
+                          onDoubleClick={(event) => event.stopPropagation()} onClick={(event) => {
+                            const box = event.currentTarget.getBoundingClientRect()
+                            setMenu({ x: box.left, y: box.bottom + 3, task })
+                          }}>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
                     </li>
                   )
                 })}

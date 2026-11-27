@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import type { CalDavTask, CalDavTaskList, TaskUpdateResult } from '@shared/task-model'
-import { readTaskIcs, writeTaskCompletion } from '../ics/task-ics'
-import { CalDavAdapter, CalDavQueryError, type CalDavItem } from './caldav-adapter'
+import type { CalDavTask, CalDavTaskList, CreateTaskInput, TaskDeleteResult, TaskDetails, TaskUpdateResult } from '@shared/task-model'
+import { readTaskIcs, writeNewTaskIcs, writeTaskCompletion, writeTaskDetails } from '../ics/task-ics'
+import { CalDavAdapter, CalDavQueryError, CalDavTaskResourceError, type CalDavItem } from './caldav-adapter'
 import type { CalDavCalendarDescriptor } from './caldav-discover'
 
 interface ListedTask {
@@ -11,6 +11,12 @@ interface ListedTask {
   ics: string
   uid: string
   listReadOnly: boolean
+}
+
+type TaskCopy = NonNullable<ReturnType<typeof readTaskIcs>>
+
+function matchesSnapshot(before: ListedTask, resource: CalDavItem & { ics: string }): boolean {
+  return before.etag ? before.etag === resource.etag : before.ics.trimEnd() === resource.ics.trimEnd()
 }
 
 function isInbox(url: URL): boolean {
@@ -112,32 +118,93 @@ export class CalDavTaskSession {
     }
   }
 
+  async createTask(accountId: string, adapter: CalDavAdapter, home: URL, input: CreateTaskInput): Promise<CalDavTask> {
+    this.requireEditableList(accountId, home, input.listId, false)
+    const listUrl = new URL(input.listId)
+    listUrl.pathname = `${listUrl.pathname.replace(/\/+$/, '')}/${input.requestId}.ics`
+    const href = listUrl.href
+    const uid = `${input.requestId}@xrncal`
+    const ics = writeNewTaskIcs(uid, input)
+    const result = await adapter.putIcs(href, ics, { ifNoneMatch: '*' })
+    const resource = await adapter.readTaskResource(href).catch((error: unknown) => {
+      if (!result.success) throw error
+      return { href, ics, etag: result.etag }
+    })
+    // A retry after a lost reply can find the task already saved under this UID.
+    const snapshot = this.snapshots.get(accountId)
+    const existing = snapshot && Array.from(snapshot.values()).find((item) => item.href === href)
+    const stored = listedTask(resource, existing?.task.id ?? input.requestId, false)
+    if (!stored || stored.uid !== uid) throw new Error('Could not confirm the saved task')
+    snapshot?.set(stored.task.id, stored)
+    return stored.task
+  }
+
   async setCompleted(
     accountId: string, adapter: CalDavAdapter, accountOrigin: string, id: string, completed: boolean
   ): Promise<TaskUpdateResult> {
+    return this.updateTask(accountId, adapter, accountOrigin, id,
+      (task) => task.completed === completed, (copy) => writeTaskCompletion(copy, completed))
+  }
+
+  async setDetails(
+    accountId: string, adapter: CalDavAdapter, accountOrigin: string, id: string, details: TaskDetails
+  ): Promise<TaskUpdateResult> {
+    return this.updateTask(accountId, adapter, accountOrigin, id,
+      (task) => task.title === details.title && task.dueDate === details.dueDate, (copy) => writeTaskDetails(copy, details))
+  }
+
+  async deleteTask(accountId: string, adapter: CalDavAdapter, accountOrigin: string, id: string): Promise<TaskDeleteResult> {
+    const source = await this.readEditableTask(accountId, adapter, accountOrigin, id)
+    if (source.status !== 'ready') {
+      if (source.status !== 'missing') return source.status
+      this.snapshots.get(accountId)?.delete(id)
+      return 'deleted'
+    }
+    const { snapshot, before, resource } = source
+    if (!matchesSnapshot(before, resource)) return 'changed'
+    if (!resource.etag) return 'readOnly'
+    const result = await adapter.deleteResource(before.href, resource.etag, 'error')
+    if (result === 'conflict') return 'changed'
+    if (!result) throw new Error('The server could not delete this task')
+    snapshot.delete(id)
+    return 'deleted'
+  }
+
+  private async readEditableTask(accountId: string, adapter: CalDavAdapter, accountOrigin: string, id: string) {
     const snapshot = this.snapshots.get(accountId)
     const before = snapshot?.get(id)
-    if (!snapshot || !before || new URL(before.href).origin !== accountOrigin) return { status: 'changed' }
-    if (before.task.readOnly) return { status: 'readOnly' }
-
-    const resource = await adapter.readTaskResource(before.href)
+    if (!snapshot || !before || new URL(before.href).origin !== accountOrigin) return { status: 'changed' as const }
+    if (before.task.readOnly) return { status: 'readOnly' as const }
+    const resource = await adapter.readTaskResource(before.href).catch((error: unknown) => {
+      if (error instanceof CalDavTaskResourceError && [404, 410].includes(error.status)) return null
+      throw error
+    })
+    if (!resource) return { status: 'missing' as const }
     const live = readTaskIcs(resource.ics)
-    if (!live || live.uid !== before.uid) return { status: 'changed' }
-    if (live.readOnly) return { status: 'readOnly' }
-    if (live.completed !== completed) {
-      // Where REPORT omits an ETag, compare its copy before using GET's ETag.
-      if (before.etag ? before.etag !== resource.etag : before.ics.trimEnd() !== resource.ics.trimEnd()) {
-        return { status: 'changed' }
-      }
+    if (!live || live.uid !== before.uid) return { status: 'changed' as const }
+    if (live.readOnly) return { status: 'readOnly' as const }
+    return { status: 'ready' as const, snapshot, before, live, resource }
+  }
+
+  private async updateTask(
+    accountId: string, adapter: CalDavAdapter, accountOrigin: string, id: string,
+    matches: (task: CalDavTask | TaskCopy) => boolean,
+    serialize: (copy: TaskCopy) => string
+  ): Promise<TaskUpdateResult> {
+    const source = await this.readEditableTask(accountId, adapter, accountOrigin, id)
+    if (source.status !== 'ready') return { status: source.status === 'missing' ? 'changed' : source.status }
+    const { snapshot, before, live, resource } = source
+    let confirmed = resource
+    if (!matches(live)) {
+      if (!matchesSnapshot(before, resource)) return { status: 'changed' }
       if (!resource.etag) return { status: 'readOnly' }
-      const result = await adapter.putIcs(before.href, writeTaskCompletion(live, completed), resource.etag)
+      const result = await adapter.putIcs(before.href, serialize(live), { ifMatch: resource.etag })
       if (result.conflict) return { status: 'changed' }
+      confirmed = await adapter.readTaskResource(before.href)
     }
 
-    // Confirm what another client will read, even when the server rewrites the
-    // payload or acknowledges the PUT without including a new ETag.
-    const saved = listedTask(await adapter.readTaskResource(before.href), id, before.listReadOnly)
-    if (!saved || saved.uid !== before.uid || saved.task.completed !== completed) return { status: 'unconfirmed' }
+    const saved = listedTask(confirmed, id, before.listReadOnly)
+    if (!saved || saved.uid !== before.uid || !matches(saved.task)) return { status: 'unconfirmed' }
     snapshot.set(id, saved)
     return { status: 'saved', task: saved.task }
   }

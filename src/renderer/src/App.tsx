@@ -840,7 +840,7 @@ const CalendarApp: React.FC = () => {
         showLunar={settings.showLunar}
         onToggleLunar={(next) => void setSetting('showLunar', next)}
         calendars={calendars}
-        onCalendarsChanged={() => void reload()}
+        onCalendarsChanged={reload}
         onFinish={(next, startAtLogin) => void finishWelcome(next, startAtLogin)}
       />
 

@@ -28,7 +28,7 @@ Xernnn là tác giả của [dự án xrncal gốc](https://github.com/Xernnn/xr
 </p>
 
 <p align="center">
-  <strong>Tiếng Việt</strong> · <a href="README.md">English</a>
+  <strong>Tiếng Việt</strong> · <a href="README.en.md">English</a> · <a href="README.md">简体中文</a>
 </p>
 
 <p align="center">
@@ -91,7 +91,7 @@ Giao diện và cách dùng của xrncal theo One Calendar (Code Spark), app kh�
 
 - **Giống:** bấm vào ô trống là mở cửa sổ sự kiện đầy đủ, không phải ô nhập tiêu đề; kéo-thả thì hỏi *Move*, *Copy* hay *Cancel*; thanh bên liệt kê từng tài khoản với các lịch của nó bên dưới; *Thêm tài khoản* đi từ loại tài khoản tới các lịch của nó.
 - **Riêng của xrncal:** âm lịch và giỗ theo năm âm, bản Linux, gõ ngày giờ vào tiêu đề bằng tiếng Việt hay tiếng Anh, bảng xử lý xung đột, và một file dữ liệu bạn tự sao lưu, khôi phục được. Không có gì nằm sau gói trả phí.
-- **Cố ý bỏ:** bản macOS và điện thoại, live tile và màn hình khoá, widget desktop, bản đồ, sự kiện Facebook, danh sách việc cần làm, và Exchange on-premises (tài khoản Microsoft chỉ đi qua Graph).
+- **Cố ý bỏ:** bản macOS và điện thoại, live tile và màn hình khoá, widget desktop, bản đồ, sự kiện Facebook, và Exchange on-premises (tài khoản Microsoft chỉ đi qua Graph).
 
 ---
 

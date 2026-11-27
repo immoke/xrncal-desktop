@@ -37,6 +37,12 @@ export class CalDavQueryError extends Error {
   }
 }
 
+export class CalDavTaskResourceError extends Error {
+  constructor(readonly status: number) {
+    super(`CalDAV task read failed with HTTP ${status}`)
+  }
+}
+
 /** The start of a failed response's body, for the error message - not all of
  *  whatever a server chose to send. */
 async function failureText(res: Response): Promise<string> {
@@ -68,7 +74,8 @@ export class CalDavAdapter {
     url: string,
     method: string,
     body?: string,
-    headers: Record<string, string> = {}
+    headers: Record<string, string> = {},
+    redirect?: RequestRedirect
   ): Promise<Response> {
     // Only to the account's own server (mayCarryCredentials); anywhere else the
     // request goes without the password and fails with a 401 instead.
@@ -79,7 +86,8 @@ export class CalDavAdapter {
         ...auth,
         ...headers
       },
-      body
+      body,
+      redirect
     })
   }
 
@@ -229,7 +237,7 @@ export class CalDavAdapter {
 
   async readTaskResource(href: string): Promise<CalDavItem & { ics: string }> {
     const res = await this.request(href, 'GET', undefined, { Accept: 'text/calendar' })
-    if (!res.ok) throw new Error(`CalDAV task read failed with HTTP ${res.status}`)
+    if (!res.ok) throw new CalDavTaskResourceError(res.status)
     return {
       href,
       ics: await readTextWithin(res, href, MAX_DISCOVERY_BYTES),
@@ -376,13 +384,19 @@ ${refs.join('\n')}
     return { success: true, etag: newEtag, href: eventUrl, body: icsContent }
   }
 
-  /** PUT a resource as it is written - no generating, no merging; `etag`
-   *  makes it conditional. */
-  async putIcs(href: string, ics: string, etag?: string): Promise<{ success: boolean; etag?: string; conflict?: boolean }> {
+  /** PUT a resource as written, optionally requiring a matching ETag or a new URL. */
+  async putIcs(
+    href: string,
+    ics: string,
+    condition?: { ifMatch: string } | { ifNoneMatch: '*' }
+  ): Promise<{ success: boolean; etag?: string; conflict?: boolean }> {
+    const create = condition && 'ifNoneMatch' in condition
     const res = await this.request(href, 'PUT', ics, {
       'Content-Type': 'text/calendar; charset=utf-8',
-      ...(etag ? { 'If-Match': etag } : {})
-    })
+      ...(condition && ('ifMatch' in condition
+        ? { 'If-Match': condition.ifMatch }
+        : { 'If-None-Match': condition.ifNoneMatch }))
+    }, create ? 'error' : undefined)
     if (res.status === 412) return { success: false, conflict: true }
     if (!res.ok) throw new Error(`CalDAV PUT failed: HTTP ${res.status}`)
     return { success: true, etag: res.headers.get('ETag') || undefined }
@@ -395,11 +409,16 @@ ${refs.join('\n')}
    * another - edited on another device since it was read here.
    */
   async deleteEvent(calendarUrl: string, eventUid: string, href?: string, etag?: string): Promise<boolean | 'conflict'> {
+    return this.deleteResource(href || eventUrlFor(calendarUrl, eventUid), etag)
+  }
+
+  async deleteResource(href: string, etag?: string, redirect?: RequestRedirect): Promise<boolean | 'conflict'> {
     const res = await this.request(
-      href || eventUrlFor(calendarUrl, eventUid),
+      href,
       'DELETE',
       undefined,
-      etag ? { 'If-Match': etag } : {}
+      etag ? { 'If-Match': etag } : {},
+      redirect
     )
     if (res.status === 412) return 'conflict'
     return res.ok || res.status === 404

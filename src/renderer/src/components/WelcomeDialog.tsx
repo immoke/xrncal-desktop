@@ -18,7 +18,7 @@ interface WelcomeDialogProps {
   showLunar: boolean
   onToggleLunar: (next: boolean) => void
   calendars: Calendar[]
-  onCalendarsChanged: () => void
+  onCalendarsChanged: () => void | Promise<void>
   /** Called once, when the welcome is finished; `launchAtLogin` is what was ticked. */
   onFinish: (next: WelcomeNext, launchAtLogin: boolean) => void
 }

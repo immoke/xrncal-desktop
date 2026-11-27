@@ -11,6 +11,9 @@ export const resources = {
         title: 'Tasks', calendar: 'Calendar', account: 'CalDAV server', switchWorkspace: 'Switch between calendar and tasks',
         collapseSidebar: 'Collapse sidebar', expandSidebar: 'Expand sidebar', clearDate: 'Clear date filter', syncServer: 'Sync a server',
         createList: 'New category', editList: 'Edit category', deleteList: 'Delete category',
+        createTask: 'New task', taskTitle: 'Task name', taskCategory: 'Category', taskDueDate: 'Due date (optional)', saveTask: 'Save task',
+        taskOptions: 'Task options for {{name}}', editTask: 'Edit', deleteTask: 'Delete task',
+        deleteTaskConfirm: 'Delete the task “{{name}}” from the Synology server?',
         listOptions: 'Options for {{name}}', listName: 'Category name', listColor: 'Colour', saveList: 'Save category',
         deleteConfirm: 'Delete “{{name}}” and its tasks from this server?',
         noAccount: 'Add a Synology task server to view its tasks.', addAccount: 'Add task server',
@@ -352,8 +355,10 @@ export const resources = {
       holidays: {
         title: 'Holiday calendars',
         vietnam: 'Vietnamese holidays & Tết',
+        china: 'China Calendar (online)',
         international: 'International holidays',
-        enable: '+ Enable'
+        enable: '+ Enable',
+        changeFailed: 'Could not update this calendar subscription. Try again.'
       },
       accounts: {
         title: 'Calendars & accounts',
@@ -719,6 +724,9 @@ export const resources = {
         title: 'Việc cần làm', calendar: 'Lịch', account: 'Máy chủ CalDAV', switchWorkspace: 'Chuyển giữa lịch và công việc',
         collapseSidebar: 'Thu gọn thanh bên', expandSidebar: 'Mở thanh bên', clearDate: 'Bỏ lọc theo ngày', syncServer: 'Đồng bộ một máy chủ',
         createList: 'Thêm danh mục', editList: 'Sửa danh mục', deleteList: 'Xóa danh mục',
+        createTask: 'Tạo tác vụ', taskTitle: 'Tên tác vụ', taskCategory: 'Danh mục', taskDueDate: 'Hạn chót (tùy chọn)', saveTask: 'Lưu tác vụ',
+        taskOptions: 'Tùy chọn tác vụ {{name}}', editTask: 'Sửa', deleteTask: 'Xóa tác vụ',
+        deleteTaskConfirm: 'Xóa tác vụ “{{name}}” khỏi máy chủ Synology?',
         listOptions: 'Tùy chọn cho {{name}}', listName: 'Tên danh mục', listColor: 'Màu', saveList: 'Lưu danh mục',
         deleteConfirm: 'Xóa “{{name}}” và các công việc trong danh mục khỏi máy chủ này?',
         noAccount: 'Thêm máy chủ Synology để xem công việc.', addAccount: 'Thêm máy chủ công việc',
@@ -1060,8 +1068,10 @@ export const resources = {
       holidays: {
         title: 'Lịch ngày lễ',
         vietnam: 'Lễ Tết Việt Nam',
+        china: 'Lịch Trung Quốc (trực tuyến)',
         international: 'Lễ Quốc tế',
-        enable: '+ Bật'
+        enable: '+ Bật',
+        changeFailed: 'Không thể cập nhật lịch đăng ký này. Vui lòng thử lại.'
       },
       accounts: {
         title: 'Lịch & tài khoản',

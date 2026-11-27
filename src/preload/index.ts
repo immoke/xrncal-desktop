@@ -71,6 +71,9 @@ const xrncalApi: XrncalAPI = {
     saveServer: (input) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.SAVE_SERVER, input),
     removeServer: (id) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.REMOVE_SERVER, id),
     list: (accountId) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.LIST, accountId),
+    create: (accountId, input) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.CREATE, accountId, input),
+    update: (accountId, id, input) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.UPDATE, accountId, id, input),
+    delete: (accountId, id) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.DELETE, accountId, id),
     setCompleted: (accountId, id, completed) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.SET_COMPLETED, accountId, id, completed),
     changeList: (accountId, change) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.CHANGE_LIST, accountId, change)
   },
@@ -127,9 +130,9 @@ const xrncalApi: XrncalAPI = {
     setAlwaysOnTop: (flag: boolean) => ipcRenderer.invoke(IPC_CHANNELS.MINI.SET_ALWAYS_ON_TOP, flag)
   },
   holidays: {
-    subscribe: (type: 'vietnam' | 'international') =>
+    subscribe: (type) =>
       ipcRenderer.invoke(IPC_CHANNELS.HOLIDAYS.SUBSCRIBE, type),
-    unsubscribe: (type: 'vietnam' | 'international') =>
+    unsubscribe: (type) =>
       ipcRenderer.invoke(IPC_CHANNELS.HOLIDAYS.UNSUBSCRIBE, type)
   },
   subscriptions: {

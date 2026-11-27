@@ -133,6 +133,11 @@ describe('IPC Channels and Contracts', () => {
         saveServer: async ({ name, username, serverUrl }) => ({ id: 'fixture', name, username, serverUrl }),
         removeServer: async () => {},
         list: async () => [],
+        create: async (_accountId, { requestId, title, dueDate }) => ({
+          id: requestId, title, dueDate, completed: false, readOnly: false
+        }),
+        update: async () => ({ status: 'changed' }),
+        delete: async () => 'deleted',
         setCompleted: async () => ({ status: 'changed' }),
         changeList: async () => {}
       },

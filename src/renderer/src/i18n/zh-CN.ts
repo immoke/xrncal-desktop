@@ -3,6 +3,9 @@ export const zhCN = {
     title: '任务', calendar: '日历', account: 'CalDAV 服务器', switchWorkspace: '切换日历或任务',
     collapseSidebar: '折叠侧边栏', expandSidebar: '展开侧边栏', clearDate: '清除日期筛选', syncServer: '同步指定服务器',
     createList: '新建分类', editList: '修改分类', deleteList: '删除分类',
+    createTask: '新建任务', taskTitle: '任务名称', taskCategory: '分类', taskDueDate: '到期日（可选）', saveTask: '保存任务',
+    taskOptions: '任务「{{name}}」的选项', editTask: '编辑', deleteTask: '删除任务',
+    deleteTaskConfirm: '从群晖服务器删除任务「{{name}}」？',
     listOptions: '“{{name}}”选项', listName: '分类名称', listColor: '颜色', saveList: '保存分类',
     deleteConfirm: '从此服务器删除「{{name}}」及其中的所有任务？',
     noAccount: '添加群晖任务服务器后即可查看任务。', addAccount: '添加任务服务器',
@@ -356,8 +359,10 @@ export const zhCN = {
   holidays: {
     title: '节假日日历',
     vietnam: '越南节假日与春节',
+    china: '中国日历（在线）',
     international: '国际节假日',
-    enable: '+ 启用'
+    enable: '+ 启用',
+    changeFailed: '无法更新此日历订阅，请重试。'
   },
   accounts: {
     title: '日历与账户',

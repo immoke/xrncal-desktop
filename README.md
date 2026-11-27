@@ -4,17 +4,15 @@
 
 <h1 align="center">xrncal</h1>
 
-This fork is maintained by [immoke](https://github.com/immoke/xrncal-desktop).
-Xernnn created the [original xrncal project](https://github.com/Xernnn/xrncal-desktop)
-and released it under the [MIT License](LICENSE).
+本分支由 immoke 维护。xrncal 由 Xernnn 创建，采用 MIT 许可证。[原项目](https://github.com/Xernnn/xrncal-desktop) · [许可证](LICENSE)
 
 <p align="center">
-  <strong>A local-first desktop calendar for Windows and Linux.</strong><br>
-  Google, Microsoft 365 and CalDAV in one window — with <em>Vietnamese lunar dates</em> and <em>lunar-year anniversaries</em>.
+  <strong>面向 Windows 和 Linux 的本地优先桌面日历。</strong><br>
+  在同一窗口使用 Google 日历、Microsoft 365 和 CalDAV，支持农历日期和按农历年份重复的纪念日。
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.2.0.4-5865F2?style=flat-square" alt="Version 1.2.0.4">
+  <img src="https://img.shields.io/badge/version-1.2.0.4-5865F2?style=flat-square" alt="版本 1.2.0.4">
   <img src="https://img.shields.io/badge/Windows-10%2F11-1A73E8?style=flat-square" alt="Windows">
   <img src="https://img.shields.io/badge/Linux-AppImage-34C77B?style=flat-square" alt="Linux">
   <img src="https://img.shields.io/badge/Electron-44-47848F?style=flat-square" alt="Electron">
@@ -24,139 +22,125 @@ and released it under the [MIT License](LICENSE).
 </p>
 
 <p align="center">
-  <img src="docs/assets/screenshots/month-dark.png" alt="xrncal month view in the dark theme: lunar day numbers in every cell, ISO week numbers, a Vietnamese holiday, and calendars from this computer, a Google account and a Nextcloud server in the sidebar" width="880">
+  <img src="docs/assets/screenshots/month-dark.png" alt="深色月视图显示农历、ISO 周数和侧栏中的多个日历账户" width="880">
 </p>
 
 <p align="center">
-  <strong>English</strong> · <a href="README.vi.md">Tiếng Việt</a>
+  <strong>简体中文</strong> · <a href="README.en.md">English</a> · <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
 <p align="center">
-  <a href="#why-not-just-use-your-existing-calendar">Why this?</a> ·
-  <a href="#screenshots">Screenshots</a> ·
-  <a href="#install">Install</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="#development">Development</a>
+  <a href="#项目特点">项目特点</a> · <a href="#界面截图">界面截图</a> · <a href="#安装">安装</a> ·
+  <a href="#功能">功能</a> · <a href="#架构">架构</a> · <a href="#开发">开发</a>
 </p>
 
 ---
 
-## Why not just use your existing calendar
+## 项目特点
 
-Most calendar apps are **a client for one service**, or **a web tab in a wrapper**. xrncal works the other way round: your data lives in SQLite on your machine, and providers are just somewhere to push it to and pull it from.
+### 农历和纪念日
 
-### 1. The lunar calendar is a first-class citizen, not a plugin
+- 日、周、月、年和列表视图均显示农历。简体中文界面采用中国农历，越南语界面采用越南农历，标记初一、十五和春节等日期。
+- 可创建按农历年份重复的纪念日，例如「农历八月十二」。应用逐年换算公历日期，处理闰月和小月。
+- 纪念日可以生成为同步日历中的普通日程，手机和其他日历客户端也能看到。新建纪念日默认提前一天提醒，并随日程同步。
 
-This is the reason the app exists.
+### 本地数据与离线使用
 
-- Lunar day labels appear in **every view** — month cells, week and day headers, list groups, the year grid. Mùng 1 and rằm are marked, each with its own colour and shape, and Tết is named.
-- **Giỗ / anniversaries that repeat by the lunar year** are a real event type. You declare *"the 12th day of the 8th lunar month"* and the app resolves the Gregorian date for **each year**, handling leap months and short 29-day months.
-- Google Calendar, Outlook and Apple Calendar have no lunar recurrence rule at all. There, the only option is to look each year up and create it by hand — miss one and the whole series drifts.
-- Those anniversaries are **materialised** into an ordinary event in a synced calendar, so your phone and your colleagues still see them even though they don't run xrncal.
-- A new anniversary **reminds you the day before** - enough notice to buy the offerings - and the reminder syncs to your phone with it.
+日历界面读取本机 SQLite。离线时可以查看、新建、修改和删除日程，变更标记为 `dirty = 1`，恢复网络后再上传。
 
-### 2. Offline is the default, not a degraded mode
+### 在同一窗口使用多个账户
 
-SQLite is the **source of truth for the UI**. With no network you can still browse, create, edit and delete; changes are marked `dirty = 1` and pushed when you are back online. There is no "cannot connect" screen.
+Google 日历、Microsoft 365、Outlook.com 和 CalDAV 可以并行同步。CalDAV 支持 iCloud、Nextcloud、群晖、Fastmail、Radicale 等服务器，各同步引擎独立处理失败。
 
-### 3. Three providers, one window, no favourites
+### 处理同步冲突
 
-Google Calendar, Microsoft 365 / Outlook.com and CalDAV (iCloud, Nextcloud, Synology, Fastmail, Radicale, any other server) sync **side by side**, each engine with its own `.catch` — one broken provider cannot block or cancel the other two.
+支持条件写入的同步操作通过 `If-Match` 检查服务端版本。收到 HTTP `412` 时，应用会标记冲突、暂停上传相关日程，并让用户选择保留哪个版本。
 
-### 4. Conflicts are surfaced, not silently overwritten
+### 加密保存账户信息
 
-Every update and delete carries an `If-Match` precondition. A `412` means the server-side copy has moved on: that row is flagged as conflicted, **taken out of the push queue**, and shown to you to resolve — instead of retrying and re-failing forever, or quietly overwriting somebody else's change.
+OAuth 令牌与 CalDAV 密码通过 Electron `safeStorage` 加密保存。Linux 需要可用的系统密钥环才能持久保存凭据。同步直接连接所配置的服务，使用者可自行管理本地数据，无需注册 xrncal 账户。应用不收集遥测。
 
-### 5. Tokens live in the OS secret store, and fail closed
+### 自建日历视图
 
-OAuth tokens and CalDAV passwords are encrypted with Electron `safeStorage`. On a Linux box with no keyring available, the app **refuses to persist them** and says so plainly — there is no plaintext fallback. No telemetry, no xrncal account, no server in the middle.
+五种日历视图由 React 实现，支持拖拽、拉伸边缘和拖选时间段。可设置 15、30 或 60 分钟的对齐步长。拖动到其他日历时，可选择移动或复制。
 
-### 6. Hand-built views with real direct manipulation
+| 能力 | xrncal |
+| --- | --- |
+| 农历 | 各视图显示农历日期，支持按农历年份重复 |
+| 数据 | 保存到本机 SQLite |
+| 离线 | 可查看、新建、修改和删除日程 |
+| 多账户 | 同时使用 Google、Microsoft Graph 和 CalDAV |
+| 冲突处理 | 暂停相关上传，并显示冲突供用户处理 |
+| 只读日历 | 在数据访问层检查日历的写入权限 |
 
-All five views are React components written for this app, with no third-party calendar library: drag and drop, edge resize, drag-select a time range, and a snap step (15 / 30 / 60 minutes) you set in Settings. Dropping onto another calendar asks *move or copy* — and only asks when the drop is genuinely ambiguous.
+### 界面设计
 
-|  | A typical calendar app | xrncal |
-| --- | --- | --- |
-| Lunar dates | Absent, or a secondary label | In every view, plus lunar-year recurrence |
-| Your data | On the provider's servers | SQLite on your machine |
-| Offline | Mostly read-only | Full read, write, edit, delete |
-| Multiple accounts | One app or tab per service | Google + Graph + CalDAV together |
-| Sync conflicts | Usually a silent last-write-wins | `If-Match` → 412 flagged → you decide |
-| Read-only calendars | Blocked in the UI | Blocked in the repo layer, unbypassable |
-
-### Modelled on One Calendar
-
-The way xrncal looks and behaves follows One Calendar (Code Spark), which has no Linux app and no Vietnamese lunar calendar. [`docs/urd.md`](docs/urd.md) holds the scope.
-
-- **The same:** a click on an empty slot opens the full editor, not a title-only popover; a drop asks *Move*, *Copy* or *Cancel*; the sidebar lists each account with its calendars underneath; *Add account* walks from the account type to its calendars.
-- **Its own:** lunar dates and lunar-year anniversaries, a Linux build, dates typed into the title in Vietnamese or English, a conflict screen, and a database file you can back up and restore yourself. Nothing is behind a paid tier.
-- **Left out on purpose:** macOS and phone apps, live tiles and lock-screen entries, desktop widgets, maps, Facebook events, a task list, and Exchange on-premises (Microsoft accounts go through Graph only).
+交互参考 One Calendar（Code Spark）。点击空白时间段可打开完整的日程编辑器。侧栏按账户列出日历，添加账户时按账户类型引导配置。应用也提供农历纪念日、Linux 版、英语和越南语自然语言日期输入、冲突处理及数据库备份。以上功能均免费提供。 [用户需求文档](docs/urd.md)
 
 ---
 
-## Screenshots
+## 界面截图
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/assets/screenshots/week-light.png" alt="Week view in the light theme with a second time zone beside the hours">
-<p align="center"><sub><strong>Week</strong> — light theme, a second time zone beside the hours, the current-time line</sub></p>
+<img src="docs/assets/screenshots/week-light.png" alt="浅色周视图，时间轴旁显示第二时区">
+<p align="center"><sub>周视图显示第二时区和当前时间线。</sub></p>
 </td>
 <td width="50%" valign="top">
-<img src="docs/assets/screenshots/year.png" alt="Year view with twelve months on one page">
-<p align="center"><sub><strong>Year</strong> — twelve months on one page, each day tinted by its events, lunar dates under the numbers</sub></p>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="docs/assets/screenshots/event-editor.png" alt="Event editor docked beside the week">
-<p align="center"><sub><strong>Editor</strong> — docked beside the grid: calendar, colour, time zone, reminders, place, meeting link, guests</sub></p>
-</td>
-<td width="50%" valign="top">
-<img src="docs/assets/screenshots/lunar-entry.png" alt="A new event whose title names a lunar date, made into a yearly lunar anniversary">
-<p align="center"><sub><strong>Typed dates</strong> — "Giỗ bà ngoại 3/2 âm lịch" becomes a lunar-year anniversary with next dates and a reminder the day before</sub></p>
+<img src="docs/assets/screenshots/year.png" alt="同屏显示十二个月的年视图">
+<p align="center"><sub>年视图用日历颜色标记有日程的日期，日期下方显示农历。</sub></p>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/assets/screenshots/list.png" alt="List view with the interface in Vietnamese">
-<p align="center"><sub><strong>List</strong> — the interface in Vietnamese; each day with its lunar date and event count</sub></p>
+<img src="docs/assets/screenshots/event-editor.png" alt="在周视图旁打开的日程编辑器">
+<p align="center"><sub>日程编辑器可设置日历、颜色、时区、提醒、地点、会议链接和参与者。</sub></p>
 </td>
 <td width="50%" valign="top">
-<img src="docs/assets/screenshots/search.png" alt="Search palette over the month view">
-<p align="center"><sub><strong>Search</strong> — opens with <code>/</code> or <code>Ctrl+K</code>; accents optional, so "gio" finds "Giỗ"</sub></p>
+<img src="docs/assets/screenshots/lunar-entry.png" alt="从标题中的农历日期创建纪念日">
+<p align="center"><sub>标题中的农历日期可转换为纪念日，并显示后续日期及提醒。</sub></p>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/assets/screenshots/add-account.png" alt="Add account dialog listing Google, Microsoft, iCloud, CalDAV, a link, public holidays and this computer">
-<p align="center"><sub><strong>Add account</strong> — in a build from source, Google and Microsoft first ask for your own sign-in details</sub></p>
+<img src="docs/assets/screenshots/list.png" alt="越南语界面下的日程列表">
+<p align="center"><sub>按日期分组的列表显示农历和每日的日程数量。</sub></p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/assets/screenshots/search.png" alt="月视图上方的搜索面板">
+<p align="center"><sub>按 <code>/</code> 或 <code>Ctrl+K</code> 打开搜索，支持忽略重音符号。</sub></p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/assets/screenshots/add-account.png" alt="列出各账户类型和订阅选项的添加账户窗口">
+<p align="center"><sub>添加账户可选择 Google、Microsoft、iCloud、CalDAV、订阅链接、节假日或本机日历。</sub></p>
 </td>
 <td width="50%" valign="top" align="center">
-<img src="docs/assets/screenshots/mini.png" alt="The mini window listing today's and tomorrow's events" width="300">
-<p align="center"><sub><strong>Mini window</strong> — from the tray, can stay on top</sub></p>
+<img src="docs/assets/screenshots/mini.png" alt="显示今天和明天日程的迷你窗口" width="300">
+<p align="center"><sub>可从系统托盘打开迷你窗口，并将其置顶。</sub></p>
 </td>
 </tr>
 </table>
 
-<sub>Made-up accounts and events, captured from the 0.2.0 code.</sub>
+<sub>截图来自 0.2.0 的示例账户和日程。</sub>
 
 ---
 
-## Install
+## 安装
 
-The fork's [Releases](https://github.com/immoke/xrncal-desktop/releases/latest) provide three builds.
+可在 [GitHub 发行页](https://github.com/immoke/xrncal-desktop/releases/latest) 下载对应的平台版本。
 
-- **Windows 10/11:** `xrncal Setup <version>.exe`. Until the installer is code-signed, SmartScreen asks first: *More info → Run anyway*.
-- **Windows portable:** Extract the entire `xrncal-<version>-windows-x64-portable.zip` to a writable folder and run `xrncal.exe` directly. Keep `portable.flag` and the other files beside it. The first launch creates `xrncal.sqlite` in the same folder.
-- **Linux:** `xrncal-<version>.AppImage`. Make it executable (`chmod +x`, or *Properties → Allow executing*) and open it.
+- **Windows 10/11 安装版**。运行 `xrncal-Setup-<version>.exe`。未签名的安装包可能触发 SmartScreen 提示，可在确认文件来源后选择「更多信息」和「仍要运行」。
+- **Windows 绿色版**。将 `xrncal-<version>-windows-x64-portable.zip` 完整解压到可写目录，运行 `xrncal.exe`。将 `portable.flag` 和其他文件保留在原目录。首次启动会在同目录创建 `xrncal.sqlite`。
+- **Linux**。下载 `xrncal-<version>.AppImage`，通过 `chmod +x` 或文件属性赋予执行权限后打开。
 
-The first launch walks you through three steps: language, a few basics (lunar dates, holidays, starting with the computer), and the calendars to bring in. Installed copies update themselves from new releases; *Settings → General → Check for updates* turns that off.
+首次启动可选择语言、农历、节假日、开机启动及需要接入的日历。安装版可在「设置 → 常规 → 检查更新」管理更新设置。
 
-### Build it yourself
+### 从源码构建
 
-You need **Node.js 23.4+** (24 recommended - the tests use its built-in `node:sqlite`) and Git.
+需要 Git 和 Node.js 23.4 或更新版本，推荐使用 Node.js 24。测试使用内置的 `node:sqlite`。
 
 ```bash
 git clone https://github.com/immoke/xrncal-desktop.git
@@ -164,45 +148,33 @@ cd xrncal-desktop
 npm install
 ```
 
-#### Linux — install it as a real app in your menu
+在 Linux 上运行以下命令可构建和安装 AppImage，并添加系统菜单入口。
 
 ```bash
 npm run app:install
 ```
 
-This builds the AppImage, puts it at `~/Applications/xrncal.AppImage`, writes a launcher to `~/.local/share/applications/xrncal.desktop` and refreshes the menu. Look for "xrncal" in your app list. Re-run the same command to update: it overwrites the same paths, and it writes by `rename`, so it **cannot corrupt a running app** (an open window keeps the build it started on until you quit and reopen it).
+安装脚本将 AppImage 放在 `~/Applications/xrncal.AppImage`，将启动器写入 `~/.local/share/applications/xrncal.desktop`。重复运行可更新。已打开的窗口会继续使用启动时的版本，退出重开后加载新版本。启动器从 `~/.cache/xrncal` 中的解包副本运行，在 Wayland 桌面通过 X11 保留迷你窗口的定位和置顶功能。
 
-The launcher runs the app from an unpacked copy in `~/.cache/xrncal` rather than from the AppImage's own mount, which can vanish under a running app, and under X11 (`--ozone-platform=x11`) so the mini window can place itself and stay on top on Wayland desktops. A reinstall removes the unpacked copies of older builds that nothing is using.
-
-If you would rather hold the AppImage yourself:
+也可自行构建 AppImage 或 Windows x64 安装包。
 
 ```bash
-npm run pack:linux     # -> dist/*.AppImage
+npm run pack:linux
 chmod +x dist/xrncal-*.AppImage
 ./dist/xrncal-*.AppImage
+
+npm run pack:win
 ```
 
-#### Windows
+Windows 安装包位于 `dist/`。如需直接运行源码并启用渲染器热重载，使用 `npm run dev`。
 
-```bash
-npm run pack:win       # -> dist/  (NSIS installer, x64)
-```
+### 连接账户
 
-Run the `.exe` in `dist/` to install. There is no macOS build.
+CalDAV 和 iCloud 需要服务器地址和登录凭据。iCloud 使用 App 专用密码。纯 HTTP 仅适用于本机、专用网络、Tailnet 或本地域名，公网连接使用 HTTPS。
 
-#### Run it straight from source
+Google 和 Microsoft 通过浏览器进行 OAuth 登录。预置 OAuth 客户端的发行包可直接登录。从源码构建时，也可通过「添加账户 → Google 或 Microsoft」配置自己的 OAuth 客户端。凭据由系统密钥环加密保存。
 
-```bash
-npm run dev            # electron-vite, renderer hot reload
-```
-
-### Connecting accounts
-
-CalDAV (Nextcloud, Synology, Fastmail, …) and iCloud need only an address and your credentials (an app-specific password for iCloud). A plain `http://` server is accepted only on this computer, a private network, a tailnet or a local name; one on the open internet is refused, so the password is never sent in clear.
-
-**Google and Microsoft** sign in from the browser, using an OAuth client: sign-in details that identify the app to them. A build that carries one signs in with no setup. In a copy without one, **Add account → Google or Microsoft** walks you through making your own, step by step, and takes the details right there: nothing to edit, no restart. They are stored encrypted by your system's keyring, the same as your account tokens, and the secret is never shown again.
-
-Developers can set the same thing outside the app: copy [`.env.example`](.env.example) to `.env` and fill in:
+开发环境可将 `.env.example` 复制为 `.env` 并设置以下参数。自行打包时，也可将同样的配置写到数据目录下的 `xrncal.env`。 [环境变量模板](.env.example) · [部署指南](docs/deployment-guide.md)
 
 ```ini
 GOOGLE_OAUTH_CLIENT_ID=
@@ -211,145 +183,93 @@ MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
 ```
 
-For a packaged build of your own, put the same lines in `xrncal.env` inside the data directory (below). Everything else - local calendars, CalDAV, iCloud, subscriptions - works without them. Registering OAuth clients, and the secrets the release workflow builds with: [`docs/deployment-guide.md`](docs/deployment-guide.md).
+群晖任务在「任务」工作区添加服务器，填写群晖 Calendar 的 CalDAV 地址和账号。任务服务器与日历账户分别管理。
 
-### Where your data lives
+在首次设置或「添加账户 → 节假日日历」中启用「中国日历（在线）」，即可订阅 ChinaCalendar。 [订阅来源](https://yangh9.github.io/ChinaCalendar/calendar.ics)
 
-| OS | Path |
+### 数据、备份与日志
+
+| 环境 | 数据库路径 |
 | --- | --- |
 | Linux | `~/.config/xrncal/xrncal.sqlite` |
-| Windows | `%APPDATA%\xrncal\xrncal.sqlite` |
+| Windows 安装版 | `%APPDATA%\xrncal\xrncal.sqlite` |
+| Windows 绿色版 | `xrncal.exe` 同目录下的 `xrncal.sqlite` |
 
-xrncal also copies it once a week into a `backups` folder next to it, keeping the last four (**Settings → General → Back up automatically**). Back it up yourself at any time from **Settings → Back up database**, which writes a plain `.sqlite` file any SQLite tool can open, and bring one back with **Settings → Restore from backup**, which opens in the automatic backups (what is there now is saved there first). Backups are readable by your user only. A database that a newer xrncal has used is not opened by an older one, and a database that will not open is explained before the app quits.
-
-If something goes wrong, **Settings → Show log file** opens the folder with `xrncal.log`: startup, sync failures and recoveries, backups and update errors. It never holds event text or passwords.
-
-> Upgrading from the old **Gone Calendar** build: the first launch of xrncal copies your data across automatically. The old profile is left exactly where it was.
-
----
-
-## Features
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-**Calendar**
-- Five views: Day, Week, Month, Year, List — each shows one period per page; Year fits all twelve months on screen, tints each day with its events' colours and moves a year at a time
-- Click an empty slot or an event for the full editor, or Create in the header; right-click an event to edit, duplicate or delete it, or a day to start an event there
-- Drag and drop, edge resize, drag-select a range
-- Snap step of 15 / 30 / 60 minutes, and a separate step for the editor's time lists
-- A new event is as long as you set it to be (15 minutes to 2 hours) when you click a slot, right-click or press Create; a dragged range keeps its own length
-- An emoji in front of a title from a button in the editor ("🍴 Lunch"), with the ones you pick most kept at the top
-- Type the when into the title: "Lunch tomorrow at 12:30", "Họp 3h chiều thứ 6", "Standup every monday 9:15" fill the date, time and repeat, and the title is saved without them; × keeps the title as typed
-- Recurring edits: this one / this and future / all; one date of a series, or the rest of it, can move to another calendar
-- Deleting shows an Undo button instead of asking first, and `Ctrl+Z` undoes a move, resize, copy or delete
-- Print the week or month, or save it as a PDF: one A4 page, with the lunar dates
-- Multi-day and all-day events, ISO week numbers; weeks start on Monday, Sunday or Saturday
-- A second timezone beside the hours, for cross-border schedules
-
-</td>
-<td width="50%" valign="top">
-
-**Vietnam & languages**
-- Lunar dates in every view; mùng 1, rằm and Tết marked
-- Anniversaries recurring by lunar year, leap months handled, with a reminder the day before - or just type "Giỗ ông 12/8 âm lịch"
-- Vietnamese and international holiday calendars, one click, extended by themselves as the years pass
-- Interface in Vietnamese, English, and Simplified Chinese - a new install follows your computer's language, clock and first day of the week
-
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-
-**Sync**
-- Google Calendar (OAuth loopback + PKCE)
-- Microsoft 365 / Outlook.com (Graph), including occurrences moved, edited or cancelled in Outlook
-- CalDAV: iCloud, Nextcloud, Synology, Fastmail, generic; one account per user per server
-- Single-occurrence edits push correctly too
-- Reminders and guest lists sync both ways, and so do CalDAV calendars' colours
-- Reply Yes / Maybe / No to invitations
-- Subscribe to any `.ics` / `webcal://` link, refreshed every six hours
-- Adaptive polling: every 20 s while the window has focus, every 5 min otherwise
-- A resolution screen for 412 conflicts
-- CalDAV edits keep what other apps stored on the event
-- A new event whose create answer is lost is made once, not twice
-- Each account says why its last sync failed (sign-in refused, server not found, keyring locked, …)
-
-</td>
-<td width="50%" valign="top">
-
-**Workspace**
-- Keeps running in the tray when the window is closed, and can start when you sign in, so reminders always ring (Ctrl+Q quits)
-- Always-on-top mini window from the tray
-- Reminders per event (all-day ones too), with snooze and a Join button; snoozes and the cards on screen survive a restart
-- Light / dark / system theme, an accent colour, and a wallpaper (four ship with the app, or your own picture) with blur and darkness
-- Search that ignores accents ("hop" finds "họp"), title suggestions from your own history
-- The Location field offers the places you have used before as you type, accents optional ("ca phe" finds "Cà phê")
-- Each event can keep its own time zone and colour, kept when it syncs over CalDAV or is exported; events saved without one (as Google's export writes them) open in the zone you were in on their date
-- `.ics` import (Settings, drag a file onto the window, or *Open with xrncal*) and export per calendar; database backup and restore
-- Detach a provider and keep every event it brought
-- Dialogs keep the keyboard inside them and announce themselves to screen readers
-
-</td>
-</tr>
-</table>
-
-### Keyboard shortcuts
-
-The whole app is reachable without a mouse. `↑` `↓` walk a cursor through the
-events on screen; everything else acts on whichever one it is sitting on.
-
-| Key | Action |
-| --- | --- |
-| `T` | Jump to today |
-| `←` `K` · `→` `J` | Previous · next period (also `PgUp` / `PgDn`) |
-| `1` `2` `3` `4` `5` | Day · Week · Month · Year · List (also `D` `W` `M` `Y` `L`) |
-| `↑` `↓` | Previous · next event |
-| `Enter` | Open the selected event (or create one) |
-| `Del` `⌫` | Delete the selected event |
-| `Shift+↑` `Shift+↓` | Move it earlier · later by one snap step |
-| `Shift+←` `Shift+→` | Move it a day back · forward |
-| `Alt+↑` `Alt+↓` | Shorten · lengthen its end |
-| `Ctrl+Z` | Undo the last move, resize, copy or delete |
-| `N` or `C` | New event |
-| `Ctrl+K` or `/` | Search |
-| `Ctrl+B` | Show or hide the sidebar |
-| `Ctrl+P` | Print or save as PDF |
-| `R` | Sync now |
-| `,` | Settings |
-| `?` or `F1` | Shortcut reference |
-| `Esc` | Close the dialog, or clear the selection |
-| `Ctrl+Q` | Quit (closing the window keeps xrncal in the tray) |
-
-In the event editor, `Tab` walks the fields and every picker opens onto the
-keyboard: `↑` `↓` move through a list, `Enter` takes the highlighted entry, and
-a date grid also takes `←` `→` for days, `PgUp` `PgDn` for months (with `Shift`,
-years) and `T` for today.
-
-| Key | Action |
-| --- | --- |
-| `Enter` | Save, straight from the title field |
-| `Ctrl+Enter` | Save / create from anywhere in the form |
-| `Ctrl+⌫` `Ctrl+Del` | Delete the event being edited (in a text field they delete a word, as anywhere else) |
-| `Esc` | Close the picker you are in, else the editor |
+- 可在「设置 → 常规」启用自动备份。应用每周备份到同目录的 `backups`，保留最近四份。
+- 在设置中可手动导出 SQLite 文件或从备份恢复。恢复前会保存当前数据。备份文件仅供本机用户读取，新版数据库应使用支持该数据库结构的客户端打开。
+- 「设置 → 显示日志文件」打开 `xrncal.log` 所在目录。日志记录启动、同步、备份和更新情况，日程正文与密码保存在各自的数据和凭据存储中。
+- 从旧版 Gone Calendar 升级时，首次启动会自动复制旧数据，并保留旧配置目录。
 
 ---
 
-## Architecture
+## 功能
+
+### 日历
+
+- 日、周、月、年和列表视图，支持全天和多日日程、ISO 周数与第二时区。每周可从星期一、星期日或星期六开始。
+- 点击空白时间段、日程或「新建」可打开编辑器。支持右键操作、拖拽、调整时长和拖选时间范围。
+- 可配置时间对齐步长、编辑器时间列表的步长和默认日程时长。拖选新建时使用选中范围的时长。
+- 编辑器支持标题表情，可从英语和越南语标题读取日期、时间和重复规则。保留原文时可取消解析。
+- 可修改本次、本次及以后或整个重复系列，也可移动部分重复日程。支持撤销移动、缩放、复制和删除。
+- 可在单张 A4 页面打印周历或月历、导出 PDF，并显示农历日期。
+
+### 同步
+
+- Google 日历通过 OAuth 回环和 PKCE 接入，Microsoft 365 与 Outlook.com 通过 Graph 接入，包括 Outlook 中移动、修改或取消的重复日程。
+- CalDAV 支持单个重复实例、提醒、参与者和日历颜色同步，并保留其他客户端存入日程中的字段。
+- 可回复邀请并订阅 `.ics` 或 `webcal://` 在线日历。订阅每六小时刷新。后台会根据窗口是否聚焦调整同步间隔。
+- 每个账户分别显示同步失败原因，可处理服务器冲突。重复提交创建请求时可使用同一日程识别信息防止重复。
+
+### 群晖任务
+
+- 可配置多台群晖任务服务器，按到期日和分类筛选，单独同步某台服务器。
+- 在任务页右上角新建任务，设置名称、分类与可选的到期日。
+- 任务分为「待办」和「已完成」。勾选完成或恢复待办时，状态同步到群晖。
+- 点击任务前的圆圈或双击任务行可以完成或恢复任务。每条任务右侧的「…」可编辑名称、到期日或删除任务。
+- 支持新建、改名、修改颜色及删除可编辑的任务分类。
+
+### 桌面工作区
+
+- 关闭窗口后可继续在托盘运行，支持开机启动、置顶迷你窗口和提醒。提醒支持稍后提醒、直接加入会议，并可在重启后恢复。
+- 支持浅色、深色和系统主题，可设置强调色、壁纸、模糊和暗度。
+- 搜索可忽略重音符号，标题和地点可从历史日程获得建议。
+- 每条日程可保留自己的时区和颜色，随 CalDAV 同步或 ICS 导出。支持导入、导出 ICS、备份及恢复 SQLite，也可断开账户并保留本地日程。
+- 支持简体中文、英语、越南语和中越农历。初始语言、时间格式及一周首日遵循系统设置。
+
+### 快捷键
+
+| 按键 | 操作 |
+| --- | --- |
+| `T` | 回到今天 |
+| `←` `K` · `→` `J` · `PgUp` `PgDn` | 切换前后周期 |
+| `1`–`5` 或 `D` `W` `M` `Y` `L` | 切换日、周、月、年、列表视图 |
+| `↑` `↓` · `Enter` | 选择上一个或下一个日程，打开所选日程 |
+| `N` 或 `C` · `Del` 或 `⌫` | 新建日程，或删除所选日程 |
+| `Shift+↑` `Shift+↓` · `Shift+←` `Shift+→` | 按时间步长或按天移动所选日程 |
+| `Alt+↑` `Alt+↓` · `Ctrl+Z` | 调整日程结束时间，或撤销上一步操作 |
+| `Ctrl+K` 或 `/` | 搜索 |
+| `Ctrl+B` · `Ctrl+P` · `R` | 折叠或展开侧栏、打印或存为 PDF、立即同步 |
+| `,` · `?` 或 `F1` | 设置、快捷键说明 |
+| `Esc` · `Ctrl+Q` | 关闭对话框或清除选择，退出 xrncal |
+
+在日程编辑器中，`Tab` 切换字段，方向键和 `Enter` 用于选取日期、时间等项目。日期选择器用 `PgUp` 和 `PgDn` 换月，配合 `Shift` 换年。标题栏按 `Enter` 可保存，表单中任意位置可用 `Ctrl+Enter` 保存。使用 `Esc` 可关闭当前选择器或编辑器。
+
+---
+
+## 架构
 
 ```mermaid
 flowchart LR
-  subgraph renderer [Renderer · sandboxed]
-    UI[5 views · Editor · DnD]
+  subgraph renderer [沙盒内的渲染进程]
+    UI[日历视图 · 任务 · 编辑与拖拽]
   end
-  subgraph preload [Preload]
+  subgraph preload [预加载层]
     Bridge["window.xrncal"]
   end
-  subgraph main [Main process]
+  subgraph main [主进程]
     DB[(SQLite · WAL)]
     Sync[Google · Graph · CalDAV]
-    OS[Tray · Mini · Notifications]
+    OS[托盘 · 迷你窗口 · 通知]
   end
   UI -->|"contextBridge"| Bridge
   Bridge -->|"ipcMain"| main
@@ -357,56 +277,51 @@ flowchart LR
   OS --- DB
 ```
 
-| Layer | Directory | Responsibility |
+| 层 | 目录 | 职责 |
 | --- | --- | --- |
-| Renderer | `src/renderer` | React 19, five views, editor, i18n, theming, the mini window (`#mini`) |
-| Preload | `src/preload` | Typed `window.xrncal`, sandbox on |
-| Main | `src/main` | SQLite and its 29 migrations, OAuth, sync, tray, notifications, backups, updates |
-| Shared | `src/shared` | `CalendarEvent`, `XrncalAPI`, lunar calendar, holidays, recurrence, title parsing |
+| 渲染进程 | `src/renderer` | React 视图、编辑器、国际化、主题和迷你窗口 |
+| 预加载层 | `src/preload` | 在沙盒中提供类型化的 `window.xrncal` 接口 |
+| 主进程 | `src/main` | SQLite 迁移、OAuth、同步、托盘、通知、备份和更新 |
+| 共享层 | `src/shared` | IPC 定义、事件模型、农历、节假日、重复规则及标题解析 |
 
-The renderer **never** imports `src/main`; IPC is the only bridge, and every channel is declared in one place, `src/shared/ipc-contract.ts`. Requests are answered only when they come from the app's own page. Read-only calendars (holiday subscriptions, `.ics` feeds) are rejected in the repo layer rather than the UI, so no code path can write to them. Packaged builds turn off Electron's run-as-Node, `NODE_OPTIONS` and inspector switches, and refuse to start with a debugging port.
+渲染进程通过 IPC 与主进程通信，通道在 `src/shared/ipc-contract.ts` 中定义。主进程校验消息来源，并在数据访问层实施只读日历的写入限制。正式打包停用 Electron 的 Node 模式、`NODE_OPTIONS` 与调试入口。
 
 ---
 
-## Development
+## 开发
 
 ```bash
-npm run dev            # run the app with renderer hot reload
-npm run typecheck      # tsc for main + renderer (run before committing)
-npm run lint           # ESLint 10 flat config, no warnings allowed
-npm run test           # Vitest — runs in Node, no Electron binary needed
-npm run test:e2e       # build, then Playwright drives the real app (needs a display)
-npm run test:caldav    # CalDAV sync against a real Radicale (pip install radicale)
-npm run build          # production bundle -> out/
+npm run dev
+npm run typecheck
+npm run lint
+npm run test
+npm run test:e2e
+npm run test:caldav
+npm run build
 ```
 
-Run a single test file: `npx vitest run tests/expand-occurrences.test.ts`, or one test with `-t "<name>"`. `test:caldav` starts its own Radicale on a spare port; point `XRNCAL_RADICALE` at the `radicale` executable if it is not on your `PATH` (a virtualenv's, say). CI runs lint + typecheck + test + build on every push and pull request, drives the built app with Playwright under `xvfb-run`, and syncs with a real Radicale server.
+- `dev` 启用热重载，`typecheck` 检查主进程和渲染进程，`lint` 运行 ESLint，`build` 将生产构建输出到 `out/`。
+- 单元测试使用 Vitest。可用 `npx vitest run tests/expand-occurrences.test.ts` 运行单个文件，或用 `-t "<名称>"` 筛选测试。
+- 桌面端到端测试使用 Playwright，需要可用的显示环境。CalDAV 集成测试使用独立的 Radicale，可通过 `XRNCAL_RADICALE` 指定其可执行文件。
+- 发行需要更新 `package.json` 中的 `version` 与 `shortVersion`，并使用 `v<shortVersion>` 标签触发 GitHub Actions 打包。项目主页和隐私政策位于 `site/`。 [发行工作流](.github/workflows/release.yml) · [项目站点](https://xernnn.github.io/xrncal-desktop/)
 
-Releases: bump `version` in `package.json`, commit, then push a `v<version>` tag. `.github/workflows/release.yml` builds the Windows installer and the Linux AppImage into a draft GitHub release; nothing reaches users until that draft is published.
-
-`site/` is the project's homepage and privacy policy, which Google's OAuth consent screen asks for. `.github/workflows/pages.yml` publishes it to [GitHub Pages](https://xernnn.github.io/xrncal-desktop/) when it changes on `main`.
-
-| Document | Contents |
+| 文档 | 内容 |
 | --- | --- |
-| [Architecture](docs/system-architecture.md) | Processes, IPC, data flow |
-| [Codebase](docs/codebase-summary.md) | Directory map and schema |
-| [Standards](docs/code-standards.md) | Naming, conventions, security rules |
-| [Design](docs/design-guidelines.md) | Colour tokens, chrome, motion |
-| [Deploy](docs/deployment-guide.md) | Building, packaging, OAuth registration |
-| [URD](docs/urd.md) · [PDR](docs/project-overview-pdr.md) · [Roadmap](docs/project-roadmap.md) | Scope and product decisions |
+| [系统架构](docs/system-architecture.md) | 进程、IPC 与数据流 |
+| [代码库概览](docs/codebase-summary.md) | 目录结构和数据库 |
+| [代码规范](docs/code-standards.md) | 命名、约定和安全规则 |
+| [设计指南](docs/design-guidelines.md) | 颜色、窗口界面和动画 |
+| [部署指南](docs/deployment-guide.md) | 构建、打包和 OAuth 注册 |
+| [用户需求](docs/urd.md) · [产品设计](docs/project-overview-pdr.md) · [路线图](docs/project-roadmap.md) | 范围和产品决策 |
 
 ---
 
-## Licence
+## 许可证
 
-[MIT](LICENSE) © Xernnn.
-
-The installer, portable ZIP, and AppImage include the project's MIT license and
-the [third-party notices](THIRD-PARTY-NOTICES.md) in the application's `resources`
-directory. The application uses MiSans Latin by Xiaomi.
-
----
+版权归 Xernnn 所有，项目采用 MIT 许可证。发行包的 `resources` 目录包含许可证和第三方声明。应用使用小米的 MiSans Latin 字体。 [MIT 许可证](LICENSE) · [第三方许可声明](THIRD-PARTY-NOTICES.md)
 
 <p align="center">
   <sub>Electron · React · TypeScript · Tailwind · SQLite · Windows &amp; Linux</sub>
 </p>
+
+[版本变化（CHANGELOG.immoke.md）](CHANGELOG.immoke.md)

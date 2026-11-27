@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CalDavTask, CalDavTaskList, CalDavTaskListChange, TaskServer, TaskServerInput } from '@shared/task-model'
+import type { CalDavTask, CalDavTaskList, CalDavTaskListChange, CreateTaskInput, TaskDetails, TaskServer, TaskServerInput } from '@shared/task-model'
 
 interface Snapshot {
   lists: CalDavTaskList[]
@@ -94,23 +94,49 @@ export function useTaskWorkspace(enabled: boolean) {
     }
   }
 
-  async function toggle(task: CalDavTask) {
-    if (!id || !api || pending.current) return
+  async function createTask(input: CreateTaskInput): Promise<CalDavTask> {
+    if (!id || !api || pending.current) throw new Error('Task server is busy')
     pending.current = true
     setSaving(true)
     try {
-      const result = await api.setCompleted(id, task.id, !task.completed)
-      if (result.status === 'saved') {
-        setSnapshots((current) => ({
-          ...current,
-          [id]: {
-            lists: current[id].lists.map((list) => ({
-              ...list, tasks: list.tasks.map((item) => item.id === task.id ? result.task : item)
-            }))
-          }
+      const task = await api.create(id, input)
+      setSnapshots((current) => {
+        const active = current[id]
+        if (!active) return current
+        const lists = active.lists.map((list) => list.id === input.listId
+          ? { ...list, tasks: [...list.tasks.filter((entry) => entry.id !== task.id), task] }
+          : list)
+        return { ...current, [id]: { ...active, lists } }
+      })
+      return task
+    } finally {
+      pending.current = false
+      setSaving(false)
+    }
+  }
+
+  async function changeTask(taskId: string, details: TaskDetails | boolean | 'delete') {
+    if (!id || !api || pending.current) throw new Error('Task server is busy')
+    pending.current = true
+    setSaving(true)
+    try {
+      const result = details === 'delete' ? await api.delete(id, taskId) : typeof details === 'boolean'
+        ? await api.setCompleted(id, taskId, details)
+        : await api.update(id, taskId, details)
+      const status = typeof result === 'string' ? result : result.status
+      if (status !== 'saved' && status !== 'deleted') return status
+      const saved = typeof result !== 'string' && result.status === 'saved' ? result.task : null
+      setSnapshots((current) => {
+        const active = current[id]
+        if (!active) return current
+        const lists = active.lists.map((list) => ({
+          ...list,
+          tasks: saved ? list.tasks.map((item) => item.id === taskId ? saved : item)
+            : list.tasks.filter((item) => item.id !== taskId)
         }))
-      }
-      return result.status
+        return { ...current, [id]: { lists } }
+      })
+      return status
     } finally {
       pending.current = false
       setSaving(false)
@@ -148,7 +174,7 @@ export function useTaskWorkspace(enabled: boolean) {
   }
 
   return {
-    sources, account, lists, selectedList, selectList, selectServer, sync, changeList, toggle,
+    sources, account, lists, selectedList, selectList, selectServer, sync, changeList, createTask, changeTask,
     saveServer, removeServer, serversReady, serverError,
     busy: syncing || saving, syncing, saving, loading: Boolean(id && !snapshot && api), error: snapshot?.error
   }

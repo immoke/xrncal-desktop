@@ -293,7 +293,7 @@ export const HolidaysView: React.FC<AccountsPageProps> = (props) => {
   const { t } = useTranslation()
   return (
     <div className="flex flex-col gap-3">
-      <HolidayCalendarToggle calendars={props.calendars} onCalendarsChanged={() => void props.refresh()} />
+      <HolidayCalendarToggle calendars={props.calendars} onCalendarsChanged={props.refresh} />
       <div className="flex justify-end">
         {/* Done finishes, wherever this page was opened from - after the add flow,
             "back" would have landed on the provider list. */}

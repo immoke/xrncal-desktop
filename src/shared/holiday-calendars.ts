@@ -8,6 +8,8 @@ export const HOLIDAY_CALENDAR_META = {
 } as const
 
 export type HolidayCalendarType = keyof typeof HOLIDAY_CALENDAR_META
+export type HolidayCalendarOption = HolidayCalendarType | 'china'
+export const CHINA_CALENDAR_URL = 'https://yangh9.github.io/ChinaCalendar/calendar.ics'
 
 export function getVietnamHolidays(year: number): Array<{
   title: string

@@ -26,7 +26,11 @@ import type { SuggestTitlesOptions, TitleSuggestion } from './title-suggestions'
 import type { LocationSuggestion } from './location-suggestions'
 import type { AppLocale, AppSettings } from './settings-contract'
 import type { OAuthClientForm, OAuthClientInfo, OAuthProvider } from './oauth-client'
-import type { CalDavTaskList, CalDavTaskListChange, TaskServer, TaskServerInput, TaskUpdateResult } from './task-model'
+import type { HolidayCalendarOption } from './holiday-calendars'
+import type {
+  CalDavTask, CalDavTaskList, CalDavTaskListChange, CreateTaskInput, TaskDeleteResult, TaskDetails,
+  TaskServer, TaskServerInput, TaskUpdateResult
+} from './task-model'
 
 export const IPC_CHANNELS = {
   APP: {
@@ -87,6 +91,9 @@ export const IPC_CHANNELS = {
     SAVE_SERVER: 'xrncal:tasks:save-server',
     REMOVE_SERVER: 'xrncal:tasks:remove-server',
     LIST: 'xrncal:tasks:list',
+    CREATE: 'xrncal:tasks:create',
+    UPDATE: 'xrncal:tasks:update',
+    DELETE: 'xrncal:tasks:delete',
     SET_COMPLETED: 'xrncal:tasks:set-completed',
     CHANGE_LIST: 'xrncal:tasks:change-list'
   },
@@ -298,6 +305,9 @@ export interface XrncalAPI {
     saveServer: (input: TaskServerInput) => Promise<TaskServer>
     removeServer: (id: string) => Promise<void>
     list: (accountId: string) => Promise<CalDavTaskList[]>
+    create: (accountId: string, input: CreateTaskInput) => Promise<CalDavTask>
+    update: (accountId: string, id: string, input: TaskDetails) => Promise<TaskUpdateResult>
+    delete: (accountId: string, id: string) => Promise<TaskDeleteResult>
     setCompleted: (accountId: string, id: string, completed: boolean) => Promise<TaskUpdateResult>
     changeList: (accountId: string, change: CalDavTaskListChange) => Promise<void>
   }
@@ -358,8 +368,8 @@ export interface XrncalAPI {
     setAlwaysOnTop: (flag: boolean) => Promise<boolean>
   },
   holidays: {
-    subscribe: (type: 'vietnam' | 'international') => Promise<{ calendarId: string; count: number }>
-    unsubscribe: (type: 'vietnam' | 'international') => Promise<boolean>
+    subscribe: (type: HolidayCalendarOption) => Promise<{ calendarId: string; count: number }>
+    unsubscribe: (type: HolidayCalendarOption) => Promise<boolean>
   }
   /** Calendars subscribed to by .ics / webcal link. Removing one is deleting
    *  the calendar (`calendars.delete`). */

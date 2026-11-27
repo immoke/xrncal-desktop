@@ -70,6 +70,8 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
   let taskRequests = 0
   let otherTaskRequests = 0
   let wrongWorkspaceRequests = 0
+  const newTasks = new Map<string, string>()
+  let taskRevision = 1
   let category: { cal_displayname: string; cal_color: string } | null = null
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = []
@@ -135,6 +137,7 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
         if (method === 'delete') {
           if (jsonString('cal_id') !== categoryId) { invalidParameters(); return }
           category = null
+          newTasks.clear()
           reply()
           return
         }
@@ -174,7 +177,10 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
     if (request.method === 'REPORT') {
       if (body.includes('name="VTODO"')) {
         taskRequests++
-        if (path === custom && category) { xml(response); return }
+        if (path === custom && category) {
+          xml(response, Array.from(newTasks, ([name, data]) => resource(name, `"task-${taskRevision}"`, data)).join(''))
+          return
+        }
         if (request.url !== list) {
           response.writeHead(404).end()
           return
@@ -185,6 +191,41 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
         xml(response)
       }
       return
+    }
+    if (path.startsWith(custom) && path.endsWith('.ics') && category) {
+      const currentTag = `"task-${taskRevision}"`
+      if (request.method === 'GET' && newTasks.has(path)) {
+        response.writeHead(200, { 'Content-Type': 'text/calendar; charset=utf-8', ETag: currentTag })
+        response.end(newTasks.get(path))
+        return
+      }
+      if (request.method === 'PUT') {
+        if (request.headers['if-match'] === currentTag && newTasks.has(path)) {
+          newTasks.set(path, body)
+          response.writeHead(204, { ETag: `"task-${++taskRevision}"` }).end()
+          return
+        }
+        if (request.headers['if-none-match'] !== '*') {
+          response.writeHead(428).end()
+          return
+        }
+        if (newTasks.has(path)) { response.writeHead(412).end(); return }
+        if (!body.includes('BEGIN:VTODO') || !body.includes('STATUS:NEEDS-ACTION')) {
+          response.writeHead(400).end()
+          return
+        }
+        newTasks.set(path, body)
+        // The first reply fails after persisting the resource. A retry must
+        // read the same task back instead of creating another one.
+        response.writeHead(503).end()
+        return
+      }
+      if (request.method === 'DELETE') {
+        if (request.headers['if-match'] !== currentTag) { response.writeHead(412).end(); return }
+        newTasks.delete(path)
+        response.writeHead(204).end()
+        return
+      }
     }
     if (request.method === 'GET' && request.url === href) {
       response.writeHead(200, { 'Content-Type': 'text/calendar; charset=utf-8', ETag: etag })
@@ -250,7 +291,7 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
       expect(completed).toMatch(/COMPLETED:\d{8}T\d{6}Z/)
       expect(completed).toContain('X-NAS-TEST:value')
 
-      await task.click()
+      await page.getByRole('listitem').filter({ has: task }).dblclick()
       await expect(task).toHaveCount(0)
       await page.getByRole('button', { name: /^To do/ }).click()
       await expect(task).not.toBeChecked()
@@ -286,6 +327,55 @@ test('reads an existing task and confirms complete and reopen through CalDAV', a
       await dialog.getByRole('button', { name: 'Save category' }).click()
       await expect(page.getByRole('button', { name: renamedCategory, exact: true })).toBeVisible()
       expect(category).toEqual({ cal_displayname: renamedCategory, cal_color: '#AA33CC' })
+
+      await page.getByRole('button', { name: renamedCategory, exact: true }).click()
+      await page.getByRole('button', { name: /^Completed / }).click()
+      const newTaskButton = page.getByRole('button', { name: 'New task', exact: true })
+      await expect(newTaskButton).toBeEnabled()
+      const tabs = await page.getByRole('button', { name: /^To do / }).boundingBox()
+      const button = await newTaskButton.boundingBox()
+      expect(tabs && button && button.x > tabs.x && Math.abs(button.y - tabs.y) < 5).toBe(true)
+      await newTaskButton.click()
+      dialog = page.getByRole('dialog', { name: 'New task' })
+      await expect(dialog.getByRole('combobox', { name: 'Category', exact: true })).toHaveValue(origin + custom)
+      await expect(dialog.getByRole('button', { name: 'Save task' })).toBeDisabled()
+      await dialog.getByLabel('Task name').fill('Review 群晖任务')
+      await dialog.getByLabel('Due date (optional)').fill('2026-12-01')
+      await dialog.getByRole('button', { name: 'Save task' }).click()
+      await expect(dialog.getByRole('alert')).toContainText('HTTP 503')
+      expect(newTasks.size).toBe(1)
+      await dialog.getByRole('button', { name: 'Save task' }).click()
+      await expect(dialog).toHaveCount(0)
+      const created = page.getByRole('checkbox', { name: 'Review 群晖任务' })
+      await expect(created).toBeVisible()
+      await expect(created).not.toBeChecked()
+      expect(newTasks.size).toBe(1)
+      expect(Array.from(newTasks.values())[0]).toContain('DUE;VALUE=DATE:20261201')
+      await page.getByRole('button', { name: 'Sync now', exact: true }).click()
+      await expect(created).toBeEnabled()
+
+      await page.getByRole('button', { name: 'Task options for Review 群晖任务' }).click()
+      await page.getByRole('menuitem', { name: 'Edit', exact: true }).click()
+      dialog = page.getByRole('dialog', { name: 'Edit', exact: true })
+      await expect(dialog.getByLabel('Task name')).toHaveValue('Review 群晖任务')
+      await expect(dialog.getByLabel('Due date (optional)')).toHaveValue('2026-12-01')
+      await dialog.getByLabel('Task name').fill('Edited 群晖任务')
+      await dialog.getByLabel('Due date (optional)').fill('2026-12-02')
+      await dialog.getByRole('button', { name: 'Save task' }).click()
+      await expect(page.getByRole('checkbox', { name: 'Edited 群晖任务' })).toBeVisible()
+      expect(Array.from(newTasks.values())[0]).toContain('DUE;VALUE=DATE:20261202')
+
+      const rowMenu = page.getByRole('button', { name: 'Task options for Edited 群晖任务' })
+      await rowMenu.click()
+      await page.getByRole('menuitem', { name: 'Delete task', exact: true }).click()
+      dialog = page.getByRole('dialog', { name: 'Delete task', exact: true })
+      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+      expect(newTasks.size).toBe(1)
+      await rowMenu.click()
+      await page.getByRole('menuitem', { name: 'Delete task', exact: true }).click()
+      await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
+      await expect(rowMenu).toHaveCount(0)
+      expect(newTasks.size).toBe(0)
 
       await page.getByRole('button', { name: `Options for ${renamedCategory}` }).click()
       await page.getByRole('menuitem', { name: 'Delete category' }).click()

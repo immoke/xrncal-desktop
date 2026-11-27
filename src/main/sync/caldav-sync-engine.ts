@@ -933,7 +933,8 @@ export class CalDavSyncEngine {
         throw new Error('The server refused to delete an invitation')
       }
     } else if (answer.changed && answer.ics !== null) {
-      const res = await adapter.putIcs(href, answer.ics, pending.some((r) => r.keep_mine === 1) ? undefined : etag ?? undefined)
+      const condition = etag && pending.every((row) => row.keep_mine !== 1) ? { ifMatch: etag } : undefined
+      const res = await adapter.putIcs(href, answer.ics, condition)
       if (res.conflict) {
         for (const r of pending) this.db.prepare('UPDATE events SET has_conflict = 1 WHERE id = ?').run(r.id)
         return 'conflict'

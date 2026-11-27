@@ -1,6 +1,9 @@
 import { ipcMain } from 'electron'
+import { DateTime } from 'luxon'
 import { IPC_CHANNELS } from '@shared/ipc-contract'
-import type { CalDavTaskListChange, TaskServerInput } from '@shared/task-model'
+import {
+  MAX_TASK_TITLE_LENGTH, type CalDavTaskListChange, type CreateTaskInput, type TaskDetails, type TaskServerInput
+} from '@shared/task-model'
 import { getTaskServer, listTaskServers, removeTaskServer, saveTaskServer } from '../task-servers'
 import { CalDavAdapter } from '../sync/caldav-adapter'
 import { CalDavTaskSession } from '../sync/caldav-tasks'
@@ -37,9 +40,28 @@ function listChange(input: unknown): CalDavTaskListChange {
   return { action, id, details: values }
 }
 
+function taskDetails(input: unknown): TaskDetails {
+  if (typeof input !== 'object' || input === null) throw new Error('Invalid task details')
+  const { title, dueDate } = input as Record<string, unknown>
+  if (typeof title !== 'string' || !title.trim() || title.trim().length > MAX_TASK_TITLE_LENGTH) throw new Error('Invalid task name')
+  if (dueDate !== undefined && (typeof dueDate !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || !DateTime.fromISO(dueDate, { zone: 'UTC' }).isValid)) {
+    throw new Error('Invalid task due date')
+  }
+  return { title: title.trim(), dueDate }
+}
+
+function createInput(input: unknown): CreateTaskInput {
+  if (typeof input !== 'object' || input === null) throw new Error('Invalid new task')
+  const { requestId, listId } = input as Record<string, unknown>
+  if (typeof requestId !== 'string' || !/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i.test(requestId) ||
+    typeof listId !== 'string') throw new Error('Invalid new task')
+  return { requestId, listId, ...taskDetails(input) }
+}
+
 export function registerTasksIpcHandlers(): void {
   const session = new CalDavTaskSession()
-  const { SERVERS, SAVE_SERVER, REMOVE_SERVER, LIST, SET_COMPLETED, CHANGE_LIST } = IPC_CHANNELS.TASKS
+  const { SERVERS, SAVE_SERVER, REMOVE_SERVER, LIST, CREATE, UPDATE, DELETE, SET_COMPLETED, CHANGE_LIST } = IPC_CHANNELS.TASKS
   for (const channel of Object.values(IPC_CHANNELS.TASKS)) ipcMain.removeHandler(channel)
 
   ipcMain.handle(SERVERS, listTaskServers)
@@ -57,6 +79,21 @@ export function registerTasksIpcHandlers(): void {
     if (typeof accountId !== 'string') throw new Error('Invalid CalDAV account')
     const { adapter, url, credentials } = connectedAdapter(accountId)
     return session.list(accountId, adapter, url, credentials.username)
+  })
+  ipcMain.handle(CREATE, (_event, accountId: unknown, input: unknown) => {
+    if (typeof accountId !== 'string') throw new Error('Invalid task server')
+    const { adapter, url } = connectedAdapter(accountId)
+    return session.createTask(accountId, adapter, url, createInput(input))
+  })
+  ipcMain.handle(UPDATE, (_event, accountId: unknown, id: unknown, input: unknown) => {
+    if (typeof accountId !== 'string' || typeof id !== 'string') throw new Error('Invalid task update')
+    const { adapter, url } = connectedAdapter(accountId)
+    return session.setDetails(accountId, adapter, url.origin, id, taskDetails(input))
+  })
+  ipcMain.handle(DELETE, (_event, accountId: unknown, id: unknown) => {
+    if (typeof accountId !== 'string' || typeof id !== 'string') throw new Error('Invalid task deletion')
+    const { adapter, url } = connectedAdapter(accountId)
+    return session.deleteTask(accountId, adapter, url.origin, id)
   })
   ipcMain.handle(SET_COMPLETED, (_event, accountId: unknown, id: unknown, completed: unknown) => {
     if (typeof accountId !== 'string' || typeof id !== 'string' || typeof completed !== 'boolean') {
