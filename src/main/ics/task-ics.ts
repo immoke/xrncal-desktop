@@ -1,7 +1,9 @@
 import ICAL from 'ical.js'
+import { DateTime } from 'luxon'
+import { MAX_REMINDER_MINUTES } from '@shared/reminders'
 import type { TaskDetails } from '@shared/task-model'
 
-export function writeNewTaskIcs(uid: string, { title, dueDate }: TaskDetails): string {
+export function writeNewTaskIcs(uid: string, details: TaskDetails): string {
   const calendar = new ICAL.Component('vcalendar')
   calendar.addPropertyWithValue('version', '2.0')
   calendar.addPropertyWithValue('prodid', '-//xrncal//Desktop Calendar//EN')
@@ -11,10 +13,11 @@ export function writeNewTaskIcs(uid: string, { title, dueDate }: TaskDetails): s
   task.addPropertyWithValue('uid', uid)
   task.addPropertyWithValue('dtstamp', now)
   task.addPropertyWithValue('created', now)
-  task.addPropertyWithValue('summary', title)
+  task.addPropertyWithValue('summary', details.title)
   task.addPropertyWithValue('status', 'NEEDS-ACTION')
   task.addPropertyWithValue('percent-complete', 0)
-  if (dueDate) task.addPropertyWithValue('due', ICAL.Time.fromDateString(dueDate))
+  writeDeadline(task, details.dueDate, details.dueTime)
+  writeTaskNotesAndReminders(task, details)
   return `${calendar.toString()}\r\n`
 }
 
@@ -28,13 +31,18 @@ export function readTaskIcs(ics: string) {
 
   const status = task.getFirstPropertyValue('status')
   const complete = task.getFirstPropertyValue('percent-complete') ?? task.getFirstPropertyValue('percent_complete')
-  const due = task.getFirstPropertyValue('due')
+  const due = readDeadline(task)
   return {
     calendar,
     task,
     uid,
     title: String(task.getFirstPropertyValue('summary') ?? ''),
-    dueDate: due instanceof ICAL.Time ? due.toString().slice(0, 10) : undefined,
+    ...due,
+    description: String(task.getFirstPropertyValue('description') ?? ''),
+    reminderMinutes: Array.from(new Set(task.getAllSubcomponents('valarm').flatMap((alarm) => {
+      const minutes = reminderOffset(alarm)
+      return minutes === undefined ? [] : [minutes]
+    }))).sort((a, b) => a - b),
     completed: status === 'COMPLETED' || Number(complete) === 100 || task.hasProperty('completed'),
     readOnly: status === 'CANCELLED' || tasks.length > 1 || task.hasProperty('rrule') ||
       task.hasProperty('rdate') || task.hasProperty('recurrence-id')
@@ -57,37 +65,86 @@ export function writeTaskCompletion(copy: NonNullable<ReturnType<typeof readTask
 
 export function writeTaskDetails(
   copy: NonNullable<ReturnType<typeof readTaskIcs>>,
-  { title, dueDate }: TaskDetails
+  details: TaskDetails
 ): string {
-  copy.task.updatePropertyWithValue('summary', title)
-  if (dueDate !== copy.dueDate) {
-    const existing = copy.task.getFirstProperty('due')
-    const start = copy.task.getFirstProperty('dtstart')
-    if (dueDate) {
-      const date = ICAL.Time.fromDateString(dueDate)
-      const template = existing ?? start
-      const templateTime = template?.getFirstValue()
-      const value = templateTime instanceof ICAL.Time && !templateTime.isDate
-        ? ICAL.Time.fromData({
-          year: date.year, month: date.month, day: date.day,
-          hour: templateTime.hour, minute: templateTime.minute, second: templateTime.second, isDate: false
-        }, templateTime.zone)
-        : date
-      const startTime = start?.getFirstValue()
-      if (startTime instanceof ICAL.Time && value.compare(startTime) <= 0) {
-        throw new Error('The due date must be after the task’s start')
-      }
-      const due = existing ?? new ICAL.Property('due')
-      due.setValue(value)
-      const tzid = template?.getParameter('tzid')
-      if (typeof tzid === 'string') due.setParameter('tzid', tzid)
-      if (!existing) copy.task.addProperty(due)
-      copy.task.removeAllProperties('duration')
-    } else {
-      copy.task.removeAllProperties('due')
-    }
+  copy.task.updatePropertyWithValue('summary', details.title)
+  const dueTime = !details.dueDate ? undefined
+    : details.dueTime === undefined ? copy.dueTime : details.dueTime ?? undefined
+  if (details.dueDate !== copy.dueDate || dueTime !== copy.dueTime) {
+    writeDeadline(copy.task, details.dueDate, dueTime)
+  }
+  writeTaskNotesAndReminders(copy.task, details)
+  if (copy.dueDate && !details.dueDate && copy.task.getAllSubcomponents('valarm').some(isEndAlarm)) {
+    throw new Error('Remove the deadline reminders before clearing the due date')
   }
   return serializeEdit(copy, ICAL.Time.fromJSDate(new Date(), true))
+}
+
+function readDeadline(task: ICAL.Component): { dueDate?: string; dueTime?: string } {
+  const prop = task.getFirstProperty('due')
+  const due = prop?.getFirstValue()
+  if (!(due instanceof ICAL.Time)) return {}
+  const iso = due.toString()
+  if (due.isDate) return { dueDate: iso }
+  const tzid = prop?.getParameter('tzid')
+  const dateTime = DateTime.fromISO(iso, typeof tzid === 'string' ? { zone: tzid } : {})
+  const local = dateTime.isValid ? dateTime.toLocal().toISO()! : iso
+  return { dueDate: local.slice(0, 10), dueTime: local.slice(11, 16) }
+}
+
+function writeDeadline(task: ICAL.Component, date?: string, time?: string | null): void {
+  if (!date) {
+    task.removeAllProperties('due')
+    return
+  }
+  const value = time
+    ? ICAL.Time.fromJSDate(DateTime.fromISO(`${date}T${time}`).toJSDate(), true)
+    : ICAL.Time.fromDateString(date)
+  const start = task.getFirstPropertyValue('dtstart')
+  if (start instanceof ICAL.Time && start.isDate !== value.isDate) {
+    throw new Error('The deadline and existing start must both be dates or both include a time')
+  }
+  if (start instanceof ICAL.Time && value.compare(start) < 0) {
+    throw new Error('The deadline must not precede the task’s start')
+  }
+  task.removeAllProperties('due')
+  task.removeAllProperties('duration')
+  task.addPropertyWithValue('due', value)
+}
+
+function isEndAlarm(alarm: ICAL.Component): boolean {
+  return String(alarm.getFirstProperty('trigger')?.getParameter('related') ?? '').toUpperCase() === 'END'
+}
+
+function reminderOffset(alarm: ICAL.Component): number | undefined {
+  if (!isEndAlarm(alarm) || String(alarm.getFirstPropertyValue('action')).toUpperCase() !== 'DISPLAY' ||
+    alarm.hasProperty('repeat') || alarm.hasProperty('duration')) return undefined
+  const trigger = alarm.getFirstPropertyValue('trigger')
+  if (!(trigger instanceof ICAL.Duration)) return undefined
+  const minutes = -(trigger.toSeconds() || 0) / 60
+  return Number.isInteger(minutes) && minutes >= 0 && minutes <= MAX_REMINDER_MINUTES ? Math.abs(minutes) : undefined
+}
+
+function writeTaskNotesAndReminders(task: ICAL.Component, details: TaskDetails): void {
+  if (details.description === '') task.removeAllProperties('description')
+  else if (details.description !== undefined) task.updatePropertyWithValue('description', details.description)
+  if (!details.reminderMinutes) return
+  if (details.reminderMinutes.length && !task.hasProperty('due')) throw new Error('Reminders need a due date')
+  const remaining = new Set(details.reminderMinutes)
+  for (const alarm of task.getAllSubcomponents('valarm')) {
+    const minutes = reminderOffset(alarm)
+    if (minutes !== undefined && !remaining.delete(minutes)) task.removeSubcomponent(alarm)
+  }
+  for (const minutes of remaining) {
+    const alarm = new ICAL.Component('valarm')
+    alarm.addPropertyWithValue('action', 'DISPLAY')
+    alarm.addPropertyWithValue('description', details.title)
+    const trigger = new ICAL.Property('trigger')
+    trigger.setParameter('related', 'END')
+    trigger.setValue(ICAL.Duration.fromSeconds(-minutes * 60))
+    alarm.addProperty(trigger)
+    task.addSubcomponent(alarm)
+  }
 }
 
 function serializeEdit(copy: NonNullable<ReturnType<typeof readTaskIcs>>, now: ICAL.Time): string {

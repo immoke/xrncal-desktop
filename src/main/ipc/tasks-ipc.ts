@@ -1,8 +1,10 @@
 import { ipcMain } from 'electron'
 import { DateTime } from 'luxon'
 import { IPC_CHANNELS } from '@shared/ipc-contract'
+import { MAX_REMINDER_MINUTES } from '@shared/reminders'
 import {
-  MAX_TASK_TITLE_LENGTH, type CalDavTaskListChange, type CreateTaskInput, type TaskDetails, type TaskServerInput
+  MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_REMINDERS, MAX_TASK_TITLE_LENGTH,
+  type CalDavTaskListChange, type CreateTaskInput, type TaskDetails, type TaskServerInput
 } from '@shared/task-model'
 import { getTaskServer, listTaskServers, removeTaskServer, saveTaskServer } from '../task-servers'
 import { CalDavAdapter } from '../sync/caldav-adapter'
@@ -42,13 +44,29 @@ function listChange(input: unknown): CalDavTaskListChange {
 
 function taskDetails(input: unknown): TaskDetails {
   if (typeof input !== 'object' || input === null) throw new Error('Invalid task details')
-  const { title, dueDate } = input as Record<string, unknown>
+  const { title, dueDate, dueTime, description, reminderMinutes } = input as Record<string, unknown>
   if (typeof title !== 'string' || !title.trim() || title.trim().length > MAX_TASK_TITLE_LENGTH) throw new Error('Invalid task name')
   if (dueDate !== undefined && (typeof dueDate !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || !DateTime.fromISO(dueDate, { zone: 'UTC' }).isValid)) {
     throw new Error('Invalid task due date')
   }
-  return { title: title.trim(), dueDate }
+  if (dueTime !== undefined && dueTime !== null) {
+    if (typeof dueTime !== 'string' || !/^\d{2}:\d{2}$/.test(dueTime) || !dueDate) throw new Error('Invalid task due time')
+    const deadline = DateTime.fromISO(`${dueDate}T${dueTime}`)
+    if (deadline.toFormat("yyyy-MM-dd'T'HH:mm") !== `${dueDate}T${dueTime}`) throw new Error('Invalid task due time')
+  }
+  if (description !== undefined && (typeof description !== 'string' || description.length > MAX_TASK_DESCRIPTION_LENGTH)) {
+    throw new Error('Invalid task description')
+  }
+  if (reminderMinutes !== undefined && (!Array.isArray(reminderMinutes) || reminderMinutes.length > MAX_TASK_REMINDERS ||
+    !reminderMinutes.every((minutes: unknown) => typeof minutes === 'number' && Number.isInteger(minutes) &&
+      minutes >= 0 && minutes <= MAX_REMINDER_MINUTES))) {
+    throw new Error('Invalid task reminders')
+  }
+  return {
+    title: title.trim(), dueDate, dueTime, description: description?.replace(/\r\n?/g, '\n'),
+    reminderMinutes: reminderMinutes && Array.from(new Set<number>(reminderMinutes)).sort((a, b) => a - b)
+  }
 }
 
 function createInput(input: unknown): CreateTaskInput {

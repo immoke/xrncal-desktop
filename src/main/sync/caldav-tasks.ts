@@ -39,6 +39,9 @@ function listedTask(item: CalDavItem, id: string, listReadOnly: boolean): Listed
       id,
       title: parsed.title,
       dueDate: parsed.dueDate,
+      dueTime: parsed.dueTime,
+      description: parsed.description,
+      reminderMinutes: parsed.reminderMinutes,
       completed: parsed.completed,
       readOnly: listReadOnly || parsed.readOnly
     },
@@ -150,7 +153,11 @@ export class CalDavTaskSession {
     accountId: string, adapter: CalDavAdapter, accountOrigin: string, id: string, details: TaskDetails
   ): Promise<TaskUpdateResult> {
     return this.updateTask(accountId, adapter, accountOrigin, id,
-      (task) => task.title === details.title && task.dueDate === details.dueDate, (copy) => writeTaskDetails(copy, details))
+      (task) => task.title === details.title && task.dueDate === details.dueDate &&
+        (details.dueTime === undefined || task.dueTime === (details.dueTime ?? undefined)) &&
+        (details.description === undefined || (task.description ?? '') === details.description) &&
+        (details.reminderMinutes === undefined || details.reminderMinutes.join() === task.reminderMinutes?.join()),
+      (copy) => writeTaskDetails(copy, details))
   }
 
   async deleteTask(accountId: string, adapter: CalDavAdapter, accountOrigin: string, id: string): Promise<TaskDeleteResult> {

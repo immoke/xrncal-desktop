@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { DateTime } from 'luxon'
 import { Check, MoreHorizontal, Pencil, Plus, Trash2, X } from 'lucide-react'
 import type { CalDavTask, CalDavTaskList, CreateTaskInput, TaskDetails } from '@shared/task-model'
+import { formatClockTimeStr } from '@shared/time-format'
 import type { TaskWorkspace } from '../hooks/use-task-workspace'
+import { useDisplayPreferences } from '../context/DisplayPreferencesContext'
 import { TaskEditorDialog } from '../components/TaskEditorDialog'
 import { ContextMenu } from '../components/ui'
 
@@ -16,6 +18,7 @@ export default function TasksView({ workspace, dueOn, clearDate, onAddServer }: 
   onAddServer: () => void
 }) {
   const { t, i18n } = useTranslation()
+  const { timeFormat } = useDisplayPreferences()
   const [showCompleted, setShowCompleted] = useState(false)
   const [editor, setEditor] = useState<TaskEditor | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; task: CalDavTask } | null>(null)
@@ -49,6 +52,9 @@ export default function TasksView({ workspace, dueOn, clearDate, onAddServer }: 
 
   const writableLists = workspace.lists.filter((list) => list.canEdit)
   const defaultList = workspace.selectedList?.canEdit ? workspace.selectedList : writableLists[0]
+  const editingList = editor?.mode === 'edit'
+    ? workspace.lists.find((list) => list.tasks.some((task) => task.id === editor.task.id))
+    : undefined
   const scoped = (workspace.selectedList ? [workspace.selectedList] : workspace.lists).flatMap((list) =>
     list.tasks.filter((task) => !dueOn || task.dueDate === dueOn)
       .map((task) => ({ task, listName: list.name || t('tasks.inbox'), color: list.color }))
@@ -90,7 +96,7 @@ export default function TasksView({ workspace, dueOn, clearDate, onAddServer }: 
             {editor?.mode === 'create' && defaultList && <TaskEditorDialog mode="create"
               lists={writableLists} defaultListId={defaultList.id} defaultDueDate={dueOn ?? ''}
               onSave={createTask} onClose={() => setEditor(null)} />}
-            {editor?.mode === 'edit' && <TaskEditorDialog mode="edit" task={editor.task}
+            {editor?.mode === 'edit' && <TaskEditorDialog mode="edit" task={editor.task} listName={editingList?.name || t('tasks.inbox')}
               onSave={(details) => changeTask(editor.task, details)} onClose={() => setEditor(null)} />}
             {editor?.mode === 'delete' && <TaskEditorDialog mode="delete" task={editor.task}
               onSave={() => changeTask(editor.task, 'delete')} onClose={() => setEditor(null)} />}
@@ -112,7 +118,9 @@ export default function TasksView({ workspace, dueOn, clearDate, onAddServer }: 
                 {shown.map(({ task, listName, color }) => {
                   const overdue = !task.completed && task.dueDate && task.dueDate < today
                   const title = task.title || t('tasks.untitled')
-                  const due = task.dueDate ? dateLabel(task.dueDate) : ''
+                  const due = task.dueDate ? [
+                    dateLabel(task.dueDate), task.dueTime && formatClockTimeStr(task.dueTime, timeFormat)
+                  ].filter(Boolean).join(' ') : ''
                   return (
                     <li key={task.id} className="flex min-h-12 items-center gap-3 rounded-md px-2.5 py-2 hover:bg-hover"
                       title={task.readOnly ? t('tasks.readOnly') : undefined} onDoubleClick={() => void toggle(task)}>

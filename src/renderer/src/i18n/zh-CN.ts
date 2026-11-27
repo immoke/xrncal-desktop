@@ -4,6 +4,8 @@ export const zhCN = {
     collapseSidebar: '折叠侧边栏', expandSidebar: '展开侧边栏', clearDate: '清除日期筛选', syncServer: '同步指定服务器',
     createList: '新建分类', editList: '修改分类', deleteList: '删除分类',
     createTask: '新建任务', taskTitle: '任务名称', taskCategory: '分类', taskDueDate: '到期日（可选）', saveTask: '保存任务',
+    titlePlaceholder: '输入标题', taskDueTime: '到期时间（可选）', taskDescription: '任务描述', descriptionPlaceholder: '添加描述',
+    atDue: '到期时', removeReminder: '移除提醒 {{number}}', reminderNeedsDue: '选择到期日后可添加提醒',
     taskOptions: '任务「{{name}}」的选项', editTask: '编辑', deleteTask: '删除任务',
     deleteTaskConfirm: '从群晖服务器删除任务「{{name}}」？',
     listOptions: '“{{name}}”选项', listName: '分类名称', listColor: '颜色', saveList: '保存分类',

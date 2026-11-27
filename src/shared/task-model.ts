@@ -1,16 +1,22 @@
-export interface CalDavTask {
+export interface CalDavTask extends Omit<TaskDetails, 'dueTime'> {
   id: string
-  title: string
-  dueDate?: string
+  dueTime?: string
   completed: boolean
   readOnly: boolean
 }
 
 export const MAX_TASK_TITLE_LENGTH = 255
+export const MAX_TASK_DESCRIPTION_LENGTH = 8192
+export const MAX_TASK_REMINDERS = 5
 
 export interface TaskDetails {
   title: string
   dueDate?: string
+  /** Local HH:mm, null for a date-only deadline, omitted to keep the existing time. */
+  dueTime?: string | null
+  description?: string
+  /** Display alarms in minutes before the deadline. Omitted to keep existing alarms. */
+  reminderMinutes?: number[]
 }
 
 export interface CreateTaskInput extends TaskDetails {
