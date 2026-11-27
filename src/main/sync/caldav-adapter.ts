@@ -31,6 +31,12 @@ const REPORT_BODY_TIMEOUT_MS = 120_000
  *  not answering the question, and is not let fill memory. */
 const MAX_DISCOVERY_BYTES = 20 * 1024 * 1024
 
+export class CalDavQueryError extends Error {
+  constructor(readonly status: number, component: string) {
+    super(`CalDAV ${component === 'VEVENT' ? 'event' : 'task'} query failed with HTTP ${status}`)
+  }
+}
+
 /** The start of a failed response's body, for the error message - not all of
  *  whatever a server chose to send. */
 async function failureText(res: Response): Promise<string> {
@@ -80,7 +86,7 @@ export class CalDavAdapter {
   /**
    * Discover calendar collections via PROPFIND
    */
-  async discoverCalendars(): Promise<CalDavCalendarDescriptor[]> {
+  async discoverCalendars(includeTaskSupport = false): Promise<CalDavCalendarDescriptor[]> {
     // No sync-token: nothing uses it, and Radicale rebuilds per-item history to
     // answer it - 2 to 25 s per poll on the home server's 8,000 events, against
     // 1.6 s for the ctag alone, which is all that decides whether to pull.
@@ -89,7 +95,7 @@ export class CalDavAdapter {
   <D:prop>
     <D:resourcetype/>
     <D:displayname/>
-    <C:calendar-description/>
+    <C:calendar-description/>${includeTaskSupport ? '\n    <C:supported-calendar-component-set/>' : ''}
     <I:calendar-color/>
     <CS:getctag/>
     <D:current-user-privilege-set/>
@@ -106,7 +112,39 @@ export class CalDavAdapter {
     }
 
     const xml = await readTextWithin(res, res.url || this.creds.url, MAX_DISCOVERY_BYTES)
+    if (!isMultistatus(xml)) {
+      throw new Error(`CalDAV discovery got HTTP ${res.status} without a multistatus answer`)
+    }
     return parseCalDavMultistatus(xml, this.creds.url)
+  }
+
+  /** Verify the collection itself when it is missing from the home listing. */
+  async isCalendarGone(calendarUrl: string): Promise<boolean> {
+    if (!mayCarryCredentials(this.creds.url, calendarUrl)) return false
+    const target = new URL(calendarUrl).href
+    const res = await this.request(
+      calendarUrl,
+      'PROPFIND',
+      '<D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>',
+      { Depth: '0', 'Content-Type': 'application/xml; charset=utf-8' }
+    )
+    if (res.url && res.url !== target) {
+      await res.body?.cancel().catch(() => {})
+      return false
+    }
+    if (res.status === 207) {
+      const xml = await readTextWithin(res, calendarUrl, MAX_DISCOVERY_BYTES)
+      return isMultistatus(xml) && multistatusResponses(xml).some((response) => {
+        // A missing property in a propstat does not say the collection is gone.
+        if (/<(?:[\w-]+:)?propstat[\s>]/i.test(response)) return false
+        const href = extractXmlText(response, 'href')
+        const status = extractXmlText(response, 'status') ?? ''
+        return Boolean(href && resolveDavHref(href, calendarUrl) === target &&
+          /^HTTP\/\S+\s+(?:404|410)(?:\s|$)/i.test(status))
+      })
+    }
+    await res.body?.cancel().catch(() => {})
+    return res.status === 404 || res.status === 410
   }
 
   /**
@@ -181,8 +219,22 @@ export class CalDavAdapter {
    * Pull all ICS events from a calendar collection via CalDAV REPORT
    */
   async pullCalendarEvents(calendarUrl: string): Promise<{ rawIcsList: (CalDavItem & { ics: string })[] }> {
-    const items = await this.eventQuery(calendarUrl, true)
+    const items = await this.calendarQuery(calendarUrl, true, 'VEVENT')
     return { rawIcsList: items.filter((i): i is CalDavItem & { ics: string } => Boolean(i.ics)) }
+  }
+
+  async pullCalendarTasks(calendarUrl: string): Promise<CalDavItem[]> {
+    return this.calendarQuery(calendarUrl, true, 'VTODO')
+  }
+
+  async readTaskResource(href: string): Promise<CalDavItem & { ics: string }> {
+    const res = await this.request(href, 'GET', undefined, { Accept: 'text/calendar' })
+    if (!res.ok) throw new Error(`CalDAV task read failed with HTTP ${res.status}`)
+    return {
+      href,
+      ics: await readTextWithin(res, href, MAX_DISCOVERY_BYTES),
+      etag: res.headers.get('ETag') ?? undefined
+    }
   }
 
   /**
@@ -191,7 +243,7 @@ export class CalDavAdapter {
    * with the stored ones says which resources need downloading at all.
    */
   async listEventEtags(calendarUrl: string): Promise<{ href: string; etag?: string }[]> {
-    return (await this.eventQuery(calendarUrl, false)).map(({ href, etag }) => ({ href, etag }))
+    return (await this.calendarQuery(calendarUrl, false, 'VEVENT')).map(({ href, etag }) => ({ href, etag }))
   }
 
   /**
@@ -238,7 +290,7 @@ ${refs.join('\n')}
     return items
   }
 
-  private async eventQuery(calendarUrl: string, withData: boolean): Promise<CalDavItem[]> {
+  private async calendarQuery(calendarUrl: string, withData: boolean, component: 'VEVENT' | 'VTODO'): Promise<CalDavItem[]> {
     const reportXml = `<?xml version="1.0" encoding="utf-8" ?>
 <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
   <D:prop>
@@ -246,7 +298,7 @@ ${refs.join('\n')}
   </D:prop>
   <C:filter>
     <C:comp-filter name="VCALENDAR">
-      <C:comp-filter name="VEVENT"/>
+      <C:comp-filter name="${component}"/>
     </C:comp-filter>
   </C:filter>
 </C:calendar-query>`
@@ -257,7 +309,10 @@ ${refs.join('\n')}
     })
 
     if (!res.ok && res.status !== 207) {
-      throw new Error(`CalDAV event query failed with HTTP ${res.status}: ${await failureText(res)}`)
+      if (component === 'VEVENT') {
+        throw new Error(`CalDAV event query failed with HTTP ${res.status}: ${await failureText(res)}`)
+      }
+      throw new CalDavQueryError(res.status, component)
     }
 
     // The request's deadline ends with the headers, and a server on a flaky link
@@ -267,7 +322,7 @@ ${refs.join('\n')}
     // server answering empty on a fault - listed no events, and the pull took
     // that as every event deleted on the server and removed them all here.
     if (!isMultistatus(xml)) {
-      throw new Error(`CalDAV event query got HTTP ${res.status} without a multistatus answer`)
+      throw new Error(`CalDAV ${component === 'VEVENT' ? 'event' : 'task'} query got HTTP ${res.status} without a multistatus answer`)
     }
     return parseCalendarItems(xml, res.url || calendarUrl)
   }
@@ -435,7 +490,7 @@ function resourceNameFor(uid: string): string {
 }
 
 /** The `response` elements of a REPORT multistatus, with absolute hrefs so they can be stored and PUT or DELETEd as-is. */
-/** Whether a REPORT body is a WebDAV multistatus at all (an empty one included). */
+/** Whether a WebDAV body is a multistatus at all (an empty one included). */
 function isMultistatus(xml: string): boolean {
   return /<(?:[a-zA-Z0-9_-]+:)?multistatus[\s/>]/.test(xml)
 }

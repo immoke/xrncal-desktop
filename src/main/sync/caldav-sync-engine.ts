@@ -9,7 +9,7 @@ import { answerOccurrences } from '../ics/merge-ics'
 import { AccountsRepo } from '../db/repos/accounts-repo'
 import { EventsRepo, type EventRow } from '../db/repos/events-repo'
 import { CalendarsRepo } from '../db/repos/calendars-repo'
-import { SyncStateRepo } from '../db/repos/sync-state-repo'
+import { MISSING_CALDAV_CALENDARS, SyncStateRepo } from '../db/repos/sync-state-repo'
 import type { Attendee, AttendeeResponseStatus, SyncResult } from '@shared/event-model'
 import { markSelfAttendee } from '@shared/event-model'
 import { mergePulledReminders, parseRemindersJson, serializeReminders } from '@shared/reminders'
@@ -41,13 +41,15 @@ export class CalDavSyncEngine {
   async syncCalendarList(
     accountId: string,
     creds: CalDavCredentials
-  ): Promise<{ id: string; ctag?: string }[]> {
+  ): Promise<{ calendars: { id: string; ctag?: string }[]; calendarListChanged: boolean }> {
     const adapter = new CalDavAdapter(creds)
-    const descriptors = await adapter.discoverCalendars()
+    const descriptors = await adapter.discoverCalendars(true)
     const now = new Date().toISOString()
-    const syncedCalendars: { id: string; ctag?: string }[] = []
+    const calendars: { id: string; ctag?: string }[] = []
+    let calendarListChanged = false
 
     for (const desc of descriptors) {
+      if (desc.supportsTasks === true && desc.supportsEvents === false) continue
       const calId = desc.href
       const name = desc.displayName || 'CalDAV Calendar'
       const color = desc.color || '#10b981'
@@ -79,6 +81,7 @@ export class CalDavSyncEngine {
              VALUES (?, ?, ?, ?, 1, ?, 0, ?, ?)`
           )
           .run(calId, accountId, name, color, isReadOnly ? 1 : 0, now, now)
+        calendarListChanged = true
       } else {
         // A calendar that can be written to takes the server's colour, so one
         // changed on another device shows here too - unless a colour picked
@@ -97,12 +100,24 @@ export class CalDavSyncEngine {
              WHERE id = ?`
           )
           .run(name, isReadOnly ? 1 : 0, now, serverColor, serverColor, calId)
+        if (this.syncStateRepo.restoreCalDavCalendar(calId)) calendarListChanged = true
       }
 
-      syncedCalendars.push({ id: calId, ctag: desc.ctag })
+      calendars.push({ id: calId, ctag: desc.ctag })
     }
 
-    return syncedCalendars
+    const listed = new Set(descriptors.map((descriptor) => descriptor.href))
+    const known = this.db.prepare(
+      `SELECT id FROM calendars WHERE account_id = ? AND id NOT IN (${MISSING_CALDAV_CALENDARS})`
+    ).all<{ id: string }>(accountId)
+    for (const { id } of known) {
+      if (listed.has(id)) continue
+      if (await adapter.isCalendarGone(id).catch(() => false)) {
+        if (this.syncStateRepo.markCalDavCalendarMissing(id, accountId)) calendarListChanged = true
+      }
+    }
+
+    return { calendars, calendarListChanged }
   }
 
   /**
@@ -113,7 +128,9 @@ export class CalDavSyncEngine {
    * and is returned. A colour picked again while one was on its way is sent
    * next time.
    */
-  async pushCalendarColors(accountId: string, creds: CalDavCredentials): Promise<{ lastError?: string }> {
+  private async pushCalendarColors(
+    accountId: string, creds: CalDavCredentials, calendarIds: ReadonlySet<string>
+  ): Promise<{ lastError?: string }> {
     const waiting = this.db
       .prepare(
         `SELECT p.calendar_id AS id, p.color FROM calendar_color_push p
@@ -125,6 +142,7 @@ export class CalDavSyncEngine {
     const adapter = new CalDavAdapter(creds)
     let lastError: string | undefined
     for (const cal of waiting) {
+      if (!calendarIds.has(cal.id)) continue
       try {
         // As in syncCalendarList: only a URL this account's password may go to.
         const outcome = mayCarryCredentials(creds.url, cal.id) ? await adapter.setCalendarColor(cal.id, cal.color) : 'refused'
@@ -802,6 +820,7 @@ export class CalDavSyncEngine {
     let totalPulled = 0
     let totalPushed = 0
     let totalErrors = 0
+    let calendarListChanged = false
     const accountErrors: Record<string, string> = {}
 
     for (const acc of activeAccounts) {
@@ -813,9 +832,10 @@ export class CalDavSyncEngine {
           throw new Error('The saved password could not be read: the system keyring is locked or unavailable')
         }
 
-        // Before the list is read, so it reads back what was sent.
-        const colors = await this.pushCalendarColors(acc.id, creds)
-        const calendars = await this.syncCalendarList(acc.id, creds)
+        const list = await this.syncCalendarList(acc.id, creds)
+        if (list.calendarListChanged) calendarListChanged = true
+        const { calendars } = list
+        const colors = await this.pushCalendarColors(acc.id, creds, new Set(calendars.map(({ id }) => id)))
         let firstFailure = colors.lastError
         if (firstFailure && accountId) totalErrors++
         for (const { id: calId, ctag } of calendars) {
@@ -871,6 +891,7 @@ export class CalDavSyncEngine {
       pushedCount: totalPushed,
       errorCount: totalErrors,
       message: `CalDAV sync finished: pulled ${totalPulled}, pushed ${totalPushed}`,
+      ...(calendarListChanged ? { calendarListChanged } : {}),
       accountErrors
     }
   }

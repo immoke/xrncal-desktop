@@ -8,10 +8,13 @@ interface SyncButtonsProps {
   accounts: CalendarAccount[]
   syncing: boolean
   onSync: (sourceId?: string) => void
+  sourceLabel?: string
+  sources?: Pick<CalendarAccount, 'id' | 'name'>[]
 }
 
-export const SyncButtons: React.FC<SyncButtonsProps> = ({ calendars, accounts, syncing, onSync }) => {
+export const SyncButtons: React.FC<SyncButtonsProps> = ({ calendars, accounts, syncing, onSync, sourceLabel, sources: providedSources }) => {
   const { t } = useTranslation()
+  const sourceName = sourceLabel ?? t('actions.syncSource')
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const toggle = useRef<HTMLButtonElement>(null)
@@ -25,7 +28,7 @@ export const SyncButtons: React.FC<SyncButtonsProps> = ({ calendars, accounts, s
     return () => document.removeEventListener('mousedown', closeOutside)
   }, [open])
 
-  const sources = [
+  const sources = providedSources ?? [
     ...accounts.filter((account) => account.isActive && account.type !== 'local'),
     ...calendars.filter((calendar) => calendar.subscriptionUrl)
   ]
@@ -63,8 +66,8 @@ export const SyncButtons: React.FC<SyncButtonsProps> = ({ calendars, accounts, s
         type="button"
         ref={toggle}
         className="gc-btn rounded-l-none border-l-0 px-1.5"
-        title={t('actions.syncSource')}
-        aria-label={t('actions.syncSource')}
+        title={sourceName}
+        aria-label={sourceName}
         aria-expanded={open && !syncing}
         aria-controls={open && !syncing ? 'calendar-sync-options' : undefined}
         disabled={syncing}

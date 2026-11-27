@@ -12,6 +12,7 @@ import { MonthYearPicker } from './MonthYearPicker'
 interface MiniCalendarProps {
   anchorDate: DateTime
   occurrences?: ExpandedOccurrence[]
+  dateColors?: ReadonlyMap<string, readonly string[]>
   firstDayOfWeek?: number
   onSelectDate: (date: DateTime) => void
   onPrevMonth: () => void
@@ -21,6 +22,7 @@ interface MiniCalendarProps {
 export const MiniCalendar: React.FC<MiniCalendarProps> = ({
   anchorDate,
   occurrences = [],
+  dateColors,
   firstDayOfWeek = 1,
   onSelectDate,
   onPrevMonth,
@@ -77,7 +79,7 @@ export const MiniCalendar: React.FC<MiniCalendarProps> = ({
           const isCurrentMonth = day.month === anchorDate.month
           const isToday = day.hasSame(today, 'day')
           const isSelected = day.hasSame(anchorDate, 'day')
-          const bars = colorsByDay.get(key) || []
+          const bars = dateColors?.get(key) ?? colorsByDay.get(key) ?? []
 
           return (
             <button

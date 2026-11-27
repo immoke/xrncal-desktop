@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createSqliteDriver, type ISqliteDatabase } from '../src/main/db/sqlite-driver'
 import { runMigrations, seedDefaultData } from '../src/main/db/database'
+import { settleDefaultCalendar } from '../src/main/db/repos/default-calendar'
 import { AccountsRepo } from '../src/main/db/repos/accounts-repo'
 import { CalendarsRepo } from '../src/main/db/repos/calendars-repo'
 import { EventsRepo } from '../src/main/db/repos/events-repo'
@@ -22,6 +23,8 @@ import { SyncStateRepo } from '../src/main/db/repos/sync-state-repo'
 
 const CAL = 'https://dav.example/alex/personal/'
 const CREDS: CalDavCredentials = { url: 'https://dav.example/alex/', username: 'alex', password: 'pw' }
+const REPLACEMENT = 'https://dav.example/alex/new-calendar/'
+const SAME_NAME = 'ChinaCalendar'
 
 interface ServerItem {
   name: string
@@ -191,6 +194,104 @@ describe('CalDAV sync', () => {
       .prepare('SELECT id, uid, title, provider_event_id FROM events WHERE calendar_id = ? ORDER BY id')
       .all<{ id: string; uid: string; title: string; provider_event_id: string | null }>(CAL)
 
+  describe('reconciling CalDAV collections', () => {
+    const accountId = 'account-caldav-reimport'
+    const subscriptionId = 'sub-china-calendar'
+    let calendars: CalendarsRepo
+    let syncState: SyncStateRepo
+
+    beforeEach(() => {
+      new AccountsRepo(db).upsert({ id: accountId, type: 'caldav', name: 'Synology' })
+      db.prepare('UPDATE calendars SET account_id = ?, name = ?, is_default = 1 WHERE id = ?')
+        .run(accountId, SAME_NAME, CAL)
+      calendars = new CalendarsRepo(db)
+      calendars.createCalendar({
+        id: subscriptionId, name: SAME_NAME, color: '#112233',
+        isReadOnly: true, subscriptionUrl: 'https://example.test/holidays.ics'
+      })
+      syncState = new SyncStateRepo(db)
+      syncState.saveSyncToken(CAL, 'ctag-1')
+      vi.spyOn(SecureStore.prototype, 'getToken').mockReturnValue(CREDS)
+    })
+
+    const listing = (href: string) => calendarListing('ctag-1')
+      .replace('/alex/personal/', new URL(href).pathname)
+      .replace('<D:displayname>Personal</D:displayname>', `<D:displayname>${SAME_NAME}</D:displayname>`)
+
+    it('shows the reimported calendar, keeps the independent subscription, and preserves cached edits', async () => {
+      const oldEvent = repo.createEvent({
+        calendarId: CAL, title: 'Old draft', dtStartUtc: '2026-10-10T10:00:00Z', dtEndUtc: '2026-10-10T11:00:00Z'
+      })
+      calendars.updateCalendar(CAL, { color: '#123456', isVisible: false })
+      const fetch = vi.fn(async (url: string, init: RequestInit) => {
+        if (url === CREDS.url && init.method === 'PROPFIND') return response(207, listing(REPLACEMENT))
+        if (url === CAL && init.method === 'PROPFIND') return response(404)
+        if (url === REPLACEMENT && init.method === 'REPORT') return response(207, multistatus([]))
+        throw new Error(`Unexpected request ${init.method}`)
+      })
+      vi.stubGlobal('fetch', fetch)
+
+      expect(await engine.syncAll(accountId)).toMatchObject({
+        success: true, pulledCount: 0, pushedCount: 0, calendarListChanged: true
+      })
+      expect(fetch.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
+        [CREDS.url, 'PROPFIND'], [CAL, 'PROPFIND'], [REPLACEMENT, 'REPORT']
+      ])
+      expect(fetch.mock.calls[1][1].headers).toMatchObject({ Depth: '0' })
+      expect(calendars.listCalendars().filter((cal) => cal.name === SAME_NAME).map((cal) => cal.id).sort())
+        .toEqual([REPLACEMENT, subscriptionId].sort())
+      expect(calendars.getCalendarById(CAL)).toBeNull()
+      expect(repo.searchEvents('Old draft')).toEqual([])
+      expect(repo.getEventById(oldEvent.id)?.event.dirty).toBe(true)
+      expect(syncState.countPendingPushes()).toBe(0)
+      expect(syncState.getSyncToken(CAL)).toBeNull()
+      settleDefaultCalendar(db)
+      expect(calendars.getCalendarById(REPLACEMENT)?.isDefault).toBe(true)
+
+      fetch.mockClear()
+      expect((await engine.syncAll(accountId)).calendarListChanged).toBeUndefined()
+      expect(fetch.mock.calls.map(([url]) => url)).toEqual([CREDS.url])
+
+      fetch.mockResolvedValue(response(207, listing(CAL)))
+      const rediscovered = await engine.syncCalendarList(accountId, CREDS)
+      expect(rediscovered.calendarListChanged).toBe(true)
+      expect(calendars.getCalendarById(CAL)).toMatchObject({ isVisible: false, color: '#123456' })
+      expect(repo.searchEvents('Old draft').map((event) => event.id)).toEqual([oldEvent.id])
+      expect(syncState.countPendingPushes()).toBe(1)
+    })
+
+    it.each([401, 403, 503, 207])('keeps a collection omitted by discovery when the probe returns %s', async (status) => {
+      const propertyMissing = '<D:multistatus xmlns:D="DAV:"><D:response><D:href>/alex/personal/</D:href>' +
+        '<D:propstat><D:prop><D:resourcetype/></D:prop><D:status>HTTP/1.1 404 Not Found</D:status>' +
+        '</D:propstat></D:response></D:multistatus>'
+      vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+        url === CREDS.url ? response(207, multistatus([])) : response(status, status === 207 ? propertyMissing : '')
+      ))
+
+      expect(await engine.syncCalendarList(accountId, CREDS)).toEqual({ calendars: [], calendarListChanged: false })
+      expect(calendars.getCalendarById(CAL)).not.toBeNull()
+      expect(syncState.getSyncToken(CAL)).toBe('ctag-1')
+    })
+
+    it('honours a resource-level removal and refreshes the list even without newly pulled events', async () => {
+      const gone = '<D:multistatus xmlns:D="DAV:"><D:response><D:href>/alex/personal/</D:href>' +
+        '<D:status>HTTP/1.1 410 Gone</D:status></D:response></D:multistatus>'
+      vi.stubGlobal('fetch', vi.fn(async (url: string) => response(207, url === CREDS.url ? multistatus([]) : gone)))
+
+      expect(await engine.syncAll(accountId)).toMatchObject({ success: true, pulledCount: 0, calendarListChanged: true })
+      expect(calendars.getCalendarById(CAL)).toBeNull()
+    })
+
+    it('rejects a non-DAV discovery response without probing the local collections', async () => {
+      const fetch = vi.fn(async () => response(200, '<html>Sign in</html>'))
+      vi.stubGlobal('fetch', fetch)
+
+      expect(await engine.syncAll(accountId)).toMatchObject({ success: false })
+      expect(fetch).toHaveBeenCalledOnce()
+      expect(calendars.getCalendarById(CAL)).not.toBeNull()
+    })
+  })
+
   it('syncs every collection of the selected account without looking up other accounts', async () => {
     const accountId = 'selected-caldav-account'
     const siblingId = 'https://dav.example/alex/work/'
@@ -200,7 +301,9 @@ describe('CalDAV sync', () => {
     db.prepare('UPDATE calendars SET account_id = ? WHERE id = ?').run(accountId, CAL)
     new CalendarsRepo(db).createCalendar({ id: siblingId, accountId, name: 'Work', color: '#112233' })
     const credentials = vi.spyOn(SecureStore.prototype, 'getToken').mockReturnValue(CREDS)
-    const discovery = vi.spyOn(engine, 'syncCalendarList').mockResolvedValue([{ id: CAL }, { id: siblingId }])
+    const discovery = vi.spyOn(engine, 'syncCalendarList').mockResolvedValue({
+      calendars: [{ id: CAL }, { id: siblingId }], calendarListChanged: false
+    })
     const calls = stubServer([])
 
     expect(await engine.syncAll(accountId)).toMatchObject({ success: true })
@@ -214,7 +317,9 @@ describe('CalDAV sync', () => {
     new AccountsRepo(db).upsert({ id: accountId, type: 'caldav', name: 'Shanghai' })
     db.prepare('UPDATE calendars SET account_id = ? WHERE id = ?').run(accountId, CAL)
     vi.spyOn(SecureStore.prototype, 'getToken').mockReturnValue(CREDS)
-    vi.spyOn(engine, 'syncCalendarList').mockResolvedValue([{ id: CAL, ctag: 'ctag-1' }])
+    vi.spyOn(engine, 'syncCalendarList').mockResolvedValue({
+      calendars: [{ id: CAL, ctag: 'ctag-1' }], calendarListChanged: false
+    })
     const samples = [
       { uid: 'weekly', start: '20250124T200000', end: '20250124T220000', rule: 'RRULE:FREQ=WEEKLY;BYDAY=FR' },
       { uid: 'flight-a', start: '20260608T193500', end: '20260609T054500' },
@@ -668,12 +773,12 @@ describe('CalDAV sync', () => {
     db.prepare("UPDATE calendars SET account_id = 'acc_caldav_holder' WHERE id = ?").run(CAL)
     stubServer([], 'ctag-1')
 
-    expect(await engine.syncCalendarList('acc_caldav_twin', CREDS)).toEqual([])
-    expect(await engine.syncCalendarList('acc_caldav_holder', CREDS)).toEqual([{ id: CAL, ctag: 'ctag-1' }])
+    expect((await engine.syncCalendarList('acc_caldav_twin', CREDS)).calendars).toEqual([])
+    expect((await engine.syncCalendarList('acc_caldav_holder', CREDS)).calendars).toEqual([{ id: CAL, ctag: 'ctag-1' }])
     // A calendar a local account holds (one detached, then connected again) is
     // synced as before.
     db.prepare("UPDATE calendars SET account_id = 'account-local-primary' WHERE id = ?").run(CAL)
-    expect(await engine.syncCalendarList('acc_caldav_twin', CREDS)).toEqual([{ id: CAL, ctag: 'ctag-1' }])
+    expect((await engine.syncCalendarList('acc_caldav_twin', CREDS)).calendars).toEqual([{ id: CAL, ctag: 'ctag-1' }])
   })
 
   it("does not let a server name another provider's calendar, or the app's own, as one of its calendars", async () => {
@@ -701,7 +806,7 @@ describe('CalDAV sync', () => {
       `</D:multistatus>`
     vi.stubGlobal('fetch', vi.fn(async () => response(207, listing)))
 
-    const synced = await engine.syncCalendarList('acc_dav', CREDS)
+    const { calendars: synced } = await engine.syncCalendarList('acc_dav', CREDS)
 
     expect(synced.map((c) => c.id)).toEqual(['https://dav.example/alex/work/'])
     const cal = (id: string) =>

@@ -19,6 +19,8 @@ interface AppSidebarProps {
   onChangeCalendarColor: (cal: Calendar, hex: string) => void
   onOpenAccount: (accountId: string | null) => void
   onAddAccount: () => void
+  children?: React.ReactNode
+  dateColors?: ReadonlyMap<string, readonly string[]>
 }
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({
@@ -35,7 +37,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   onSetCalendarsVisibility,
   onChangeCalendarColor,
   onOpenAccount,
-  onAddAccount
+  onAddAccount,
+  children,
+  dateColors
 }) => {
   if (collapsed) return null
 
@@ -44,12 +48,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       <MiniCalendar
         anchorDate={anchorDate}
         occurrences={occurrences}
+        dateColors={dateColors}
         firstDayOfWeek={firstDayOfWeek}
         onSelectDate={onSelectDate}
         onPrevMonth={onPrevMonth}
         onNextMonth={onNextMonth}
       />
-      <SidebarCalendars
+      {children ?? <SidebarCalendars
         accounts={accounts}
         calendars={calendars}
         onToggleVisibility={onToggleCalendarVisibility}
@@ -57,7 +62,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         onChangeColor={onChangeCalendarColor}
         onOpenAccount={onOpenAccount}
         onAddAccount={onAddAccount}
-      />
+      />}
     </aside>
   )
 }

@@ -2,6 +2,7 @@ import type { ISqliteDatabase } from '../sqlite-driver'
 import type { Calendar } from '@shared/event-model'
 import type { HolidayCalendarType } from '@shared/holiday-calendars'
 import { parseRemindersJson } from '@shared/reminders'
+import { MISSING_CALDAV_CALENDARS } from './sync-state-repo'
 
 interface CreateCalendarParams {
   id?: string
@@ -67,14 +68,14 @@ export class CalendarsRepo {
 
   listCalendars(): Calendar[] {
     const rows = this.db
-      .prepare('SELECT * FROM calendars ORDER BY is_default DESC, name ASC')
+      .prepare(`SELECT * FROM calendars WHERE id NOT IN (${MISSING_CALDAV_CALENDARS}) ORDER BY is_default DESC, name ASC`)
       .all<CalendarRow>()
     return rows.map(mapRowToCalendar)
   }
 
   getCalendarById(id: string): Calendar | null {
     const row = this.db
-      .prepare('SELECT * FROM calendars WHERE id = ?')
+      .prepare(`SELECT * FROM calendars WHERE id = ? AND id NOT IN (${MISSING_CALDAV_CALENDARS})`)
       .get<CalendarRow>(id)
     return row ? mapRowToCalendar(row) : null
   }

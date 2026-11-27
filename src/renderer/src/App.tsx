@@ -31,6 +31,8 @@ import WeekView from './views/WeekView'
 import DayView from './views/DayView'
 import YearView from './views/YearView'
 import ListView from './views/ListView'
+import TasksView from './views/TasksView'
+import { useTaskWorkspace } from './hooks/use-task-workspace'
 import EventEditorDialog, {
   keepDraftPreview,
   type EventEditorInitialData,
@@ -48,6 +50,8 @@ import SyncConflictsModal from './components/SyncConflictsModal'
 import ReminderStack from './components/ReminderStack'
 import AppHeader from './components/shell/AppHeader'
 import AppSidebar from './components/shell/AppSidebar'
+import { SidebarTaskLists } from './components/shell/SidebarTaskLists'
+import TaskServersDialog from './components/TaskServersDialog'
 import { useEventDnD } from './dnd/use-event-dnd'
 import { NotionToaster, toast, showFriendlyError, ContextMenu } from './components/ui'
 import { DisplayPreferencesProvider, displayPreferencesOf } from './context/DisplayPreferencesContext'
@@ -85,6 +89,10 @@ const CalendarApp: React.FC = () => {
   const { firstDayOfWeek, dragSnapMinutes, defaultEventMinutes } = displayPreferences
 
   const [selectedView, setCurrentView] = useState<CalendarViewType>()
+  const [showTasks, setShowTasks] = useState(false)
+  const [showTaskServers, setShowTaskServers] = useState(false)
+  const [taskMonth, setTaskMonth] = useState<DateTime>(() => DateTime.local())
+  const [taskDay, setTaskDay] = useState<string | null>(null)
   const currentView = selectedView ?? (isCalendarView(settings.defaultView) ? settings.defaultView : 'month')
   const [anchorDate, setAnchorDate] = useState<DateTime>(() => DateTime.local())
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -128,6 +136,20 @@ const CalendarApp: React.FC = () => {
   // Held back until the settings are in: the week start decides the range.
   const data = useCalendarData(queryRange, ready)
   const { calendars, accounts, occurrences, conflicts, reload } = data
+  const taskWorkspace = useTaskWorkspace(showTasks)
+  const taskDateColors = useMemo(() => {
+    const colors = new Map<string, string[]>()
+    for (const list of taskWorkspace.selectedList ? [taskWorkspace.selectedList] : taskWorkspace.lists) {
+      const color = list.color ?? '#4A7CF0'
+      for (const { dueDate, completed } of list.tasks) {
+        if (!dueDate || completed) continue
+        const day = colors.get(dueDate) ?? []
+        if (day.length < 3 && !day.includes(color)) day.push(color)
+        colors.set(dueDate, day)
+      }
+    }
+    return colors
+  }, [taskWorkspace.lists, taskWorkspace.selectedList])
   const undo = useUndoStack(reload)
   const { clientXOf, lastX } = useLastPointer()
   const commands = useEventCommands({ calendars, reload, undo, dragSnapMinutes, openEditor, closeEditor, clientXOf })
@@ -377,7 +399,7 @@ const CalendarApp: React.FC = () => {
       case 'toggleSidebar':
         // With the sidebar switched off there is nothing to collapse, so the
         // first press is what puts one there rather than doing nothing.
-        if (settings.showMiniCalendar) setSidebarCollapsed((v) => !v)
+        if (showTasks || settings.showMiniCalendar) setSidebarCollapsed((v) => !v)
         else {
           setSidebarCollapsed(false)
           void setSetting('showMiniCalendar', true)
@@ -437,16 +459,17 @@ const CalendarApp: React.FC = () => {
         setIsSettingsOpen(true)
         break
       case 'sync':
-        void syncNow()
+        void (showTasks ? taskWorkspace.sync() : syncNow())
         break
     }
   }
 
   useKeyCommands(
     {
-      overlayOpen: isOverlayOpen,
+      overlayOpen: isOverlayOpen || showTaskServers,
       searchOpen: isSearchPaletteOpen,
-      overlayOwnsEscape: ownsEscape,
+      overlayOwnsEscape: ownsEscape || showTasks,
+      tasksOpen: showTasks,
       hasSelection: Boolean(selectedOccurrence),
       view: currentView,
       dragSnapMinutes
@@ -459,6 +482,9 @@ const CalendarApp: React.FC = () => {
   // the bar says there.
   const appHeader = (
     <AppHeader
+      showTasks={showTasks}
+      onSelectWorkspace={setShowTasks}
+      sidebarCollapsed={sidebarCollapsed}
       title={
         currentView === 'day'
           ? ''
@@ -469,18 +495,23 @@ const CalendarApp: React.FC = () => {
       currentView={currentView}
       anchorDate={anchorDate}
       onSelectDate={setAnchorDate}
-      showSidebarToggle={settings.showMiniCalendar}
+      showSidebarToggle={showTasks || settings.showMiniCalendar}
       onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
       onPrev={handlePrev}
       onNext={handleNext}
-      calendars={calendars}
+      calendars={showTasks ? [] : calendars}
       accounts={accounts}
-      syncing={syncing}
-      onSync={(sourceId) => void syncNow(sourceId)}
+      syncSources={showTasks ? taskWorkspace.sources : undefined}
+      syncing={showTasks ? taskWorkspace.busy : syncing}
+      onSync={(sourceId) => void (showTasks ? taskWorkspace.sync(sourceId) : syncNow(sourceId))}
       onNewEvent={() => openEditorForDate(anchorDate)}
       onChangeView={setCurrentView}
       onSearch={() => setIsSearchPaletteOpen(true)}
       onOpenMenu={() => {
+        if (showTasks) {
+          setShowTaskServers(true)
+          return
+        }
         setSettingsSection(null)
         setIsSettingsOpen(true)
       }}
@@ -546,15 +577,16 @@ const CalendarApp: React.FC = () => {
       )}
 
       <div className="z-10 flex min-h-0 flex-1 overflow-hidden">
-        {settings.showMiniCalendar && (
+        {(showTasks || settings.showMiniCalendar) && (
           <AppSidebar
             collapsed={sidebarCollapsed}
-            anchorDate={anchorDate}
-            occurrences={occurrences}
+            anchorDate={showTasks ? taskMonth : anchorDate}
+            occurrences={showTasks ? [] : occurrences}
+            dateColors={showTasks ? taskDateColors : undefined}
             firstDayOfWeek={firstDayOfWeek}
-            onSelectDate={setAnchorDate}
-            onPrevMonth={() => setAnchorDate((d) => d.minus({ months: 1 }))}
-            onNextMonth={() => setAnchorDate((d) => d.plus({ months: 1 }))}
+            onSelectDate={showTasks ? (date) => { setTaskMonth(date); setTaskDay(date.toISODate()) } : setAnchorDate}
+            onPrevMonth={() => (showTasks ? setTaskMonth : setAnchorDate)((d) => d.minus({ months: 1 }))}
+            onNextMonth={() => (showTasks ? setTaskMonth : setAnchorDate)((d) => d.plus({ months: 1 }))}
             accounts={accounts}
             calendars={calendars}
             onToggleCalendarVisibility={data.toggleCalendarVisibility}
@@ -570,10 +602,15 @@ const CalendarApp: React.FC = () => {
               )
             }
             onAddAccount={() => setAccountsDialog([{ name: 'list' }, { name: 'add' }])}
-          />
+          >
+            {showTasks ? <SidebarTaskLists key={taskWorkspace.account?.id} workspace={taskWorkspace} /> : undefined}
+          </AppSidebar>
         )}
 
-        <main key={zoneMoves} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
+        {showTasks ? (
+          <TasksView key={taskWorkspace.account?.id} workspace={taskWorkspace} dueOn={taskDay} clearDate={() => setTaskDay(null)}
+            onAddServer={() => setShowTaskServers(true)} />
+        ) : <main key={zoneMoves} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
 
           {currentView === 'month' && (
             <MonthView
@@ -672,8 +709,10 @@ const CalendarApp: React.FC = () => {
               onNearEdge={extendList}
             />
           )}
-        </main>
+        </main>}
       </div>
+
+      {showTaskServers && <TaskServersDialog workspace={taskWorkspace} onClose={() => setShowTaskServers(false)} />}
 
       <SearchPaletteModal
         isOpen={isSearchPaletteOpen}

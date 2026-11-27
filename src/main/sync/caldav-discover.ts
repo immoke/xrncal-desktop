@@ -11,6 +11,8 @@ export interface CalDavCalendarDescriptor {
   ctag?: string
   syncToken?: string
   isReadOnly?: boolean
+  supportsTasks?: boolean
+  supportsEvents?: boolean
 }
 
 /**
@@ -222,6 +224,7 @@ export function parseCalDavMultistatus(xml: string, baseUrl: string): CalDavCale
     const color = normalizeCalendarColor(extractXmlText(resp, 'calendar-color'))
     const ctag = extractXmlText(resp, 'getctag')
     const syncToken = extractXmlText(resp, 'sync-token')
+    const supported = extractXmlTagValue(resp, 'supported-calendar-component-set')
 
     // Check if calendar is read-only (<current-user-privilege-set> lacks <write/>)
     const privs = extractXmlTagValue(resp, 'current-user-privilege-set') || ''
@@ -244,7 +247,11 @@ export function parseCalDavMultistatus(xml: string, baseUrl: string): CalDavCale
       color,
       ctag,
       syncToken,
-      isReadOnly
+      isReadOnly,
+      ...(supported === undefined ? {} : {
+        supportsTasks: /\bname\s*=\s*["']VTODO["']/i.test(supported),
+        supportsEvents: /\bname\s*=\s*["']VEVENT["']/i.test(supported)
+      })
     })
   }
 

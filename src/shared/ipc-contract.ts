@@ -26,6 +26,7 @@ import type { SuggestTitlesOptions, TitleSuggestion } from './title-suggestions'
 import type { LocationSuggestion } from './location-suggestions'
 import type { AppLocale, AppSettings } from './settings-contract'
 import type { OAuthClientForm, OAuthClientInfo, OAuthProvider } from './oauth-client'
+import type { CalDavTaskList, CalDavTaskListChange, TaskServer, TaskServerInput, TaskUpdateResult } from './task-model'
 
 export const IPC_CHANNELS = {
   APP: {
@@ -80,6 +81,14 @@ export const IPC_CHANNELS = {
     UPDATE: 'xrncal:calendar:update',
     DELETE: 'xrncal:calendar:delete',
     EVENT_COUNT: 'xrncal:calendar:event-count'
+  },
+  TASKS: {
+    SERVERS: 'xrncal:tasks:servers',
+    SAVE_SERVER: 'xrncal:tasks:save-server',
+    REMOVE_SERVER: 'xrncal:tasks:remove-server',
+    LIST: 'xrncal:tasks:list',
+    SET_COMPLETED: 'xrncal:tasks:set-completed',
+    CHANGE_LIST: 'xrncal:tasks:change-list'
   },
   EVENT: {
     QUERY_RANGE: 'xrncal:event:query-range',
@@ -283,6 +292,14 @@ export interface XrncalAPI {
     delete: (id: string, options?: { moveEventsTo?: string }) => Promise<boolean>
     /** The events a calendar holds, for asking what should happen to them. */
     eventCount: (id: string) => Promise<number>
+  }
+  tasks: {
+    servers: () => Promise<TaskServer[]>
+    saveServer: (input: TaskServerInput) => Promise<TaskServer>
+    removeServer: (id: string) => Promise<void>
+    list: (accountId: string) => Promise<CalDavTaskList[]>
+    setCompleted: (accountId: string, id: string, completed: boolean) => Promise<TaskUpdateResult>
+    changeList: (accountId: string, change: CalDavTaskListChange) => Promise<void>
   }
   events: {
     queryRange: (calendarIds: string[], startUtc: string, endUtc: string) => Promise<ExpandedOccurrence[]>

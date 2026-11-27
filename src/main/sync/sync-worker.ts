@@ -195,7 +195,13 @@ export class SyncWorker {
     const failures = { ...this.accountErrors, ...this.engineErrors }
     for (const line of accountErrorChanges(this.loggedFailures, failures)) log(line.level, line.message)
     this.loggedFailures = failures
-    return { success: errorCount === 0, pulledCount, pushedCount, errorCount }
+    return {
+      success: errorCount === 0,
+      pulledCount,
+      pushedCount,
+      errorCount,
+      calendarListChanged: caldavRes.calendarListChanged
+    }
   }
 
   private async runSync(manual?: { sourceId?: string }): Promise<SyncResult> {
@@ -208,7 +214,7 @@ export class SyncWorker {
       // Sync may discover calendars or change event IDs and subscriptions can
       // change to an empty feed. Reload the windows after each manual round.
       const defaultMoved = settleDefaultCalendar(this.db)
-      if (manual || result.pulledCount > 0 || result.pushedCount > 0 || defaultMoved) {
+      if (manual || result.pulledCount > 0 || result.pushedCount > 0 || result.calendarListChanged || defaultMoved) {
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) win.webContents.send(IPC_CHANNELS.SYNC.CHANGED)
         }

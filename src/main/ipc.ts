@@ -5,6 +5,7 @@ import { extname, join } from 'node:path'
 import { IPC_CHANNELS, type AppLocale, type BackupResult } from '@shared/ipc-contract'
 import { isAppLocale } from '@shared/settings-contract'
 import { registerCalendarIpcHandlers } from './ipc/calendar-ipc'
+import { registerTasksIpcHandlers } from './ipc/tasks-ipc'
 import { registerSettingsIpcHandlers } from './ipc/settings-ipc'
 import { registerAuthSyncIpcHandlers } from './ipc/auth-sync-ipc'
 import { registerHolidayIpcHandlers } from './ipc/holiday-ipc'
@@ -123,6 +124,7 @@ export function registerIpcHandlers(): void {
   // Register domain calendar, event, settings, auth, sync, and holiday IPC handlers
   registerSettingsIpcHandlers()
   registerCalendarIpcHandlers()
+  registerTasksIpcHandlers()
   registerAuthSyncIpcHandlers()
   registerHolidayIpcHandlers()
   registerSubscriptionIpcHandlers()

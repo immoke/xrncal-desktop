@@ -7,6 +7,26 @@ export const resources = {
   en: {
     translation: {
       appName: 'xrncal',
+      tasks: {
+        title: 'Tasks', calendar: 'Calendar', account: 'CalDAV server', switchWorkspace: 'Switch between calendar and tasks',
+        collapseSidebar: 'Collapse sidebar', expandSidebar: 'Expand sidebar', clearDate: 'Clear date filter', syncServer: 'Sync a server',
+        createList: 'New category', editList: 'Edit category', deleteList: 'Delete category',
+        listOptions: 'Options for {{name}}', listName: 'Category name', listColor: 'Colour', saveList: 'Save category',
+        deleteConfirm: 'Delete “{{name}}” and its tasks from this server?',
+        noAccount: 'Add a Synology task server to view its tasks.', addAccount: 'Add task server',
+        servers: 'Task servers', editServer: 'Edit task server', removeServer: 'Remove task server',
+        editServerNamed: 'Edit server {{name}}', removeServerNamed: 'Remove server {{name}}',
+        serverName: 'Display name', serverUrl: 'Synology address', serverUser: 'Username', serverPassword: 'Password',
+        keepPassword: 'Leave blank to keep the saved password', saveServer: 'Save server',
+        removeServerConfirm: 'Remove the saved connection for “{{name}}” from this device?',
+        pending: 'To do', completed: 'Completed', allLists: 'All categories', list: 'Task categories',
+        inbox: 'Inbox', loading: 'Reading tasks…',
+        noLists: 'No task lists found for this account.', noPending: 'No open tasks.', noCompleted: 'No completed tasks.',
+        untitled: 'Untitled task', overdue: 'Overdue · {{date}}',
+        changed: 'This task changed on the server. Refresh the list and try again.',
+        readOnly: 'This task can only be viewed.',
+        unconfirmed: 'The server has not confirmed the updated status. Refresh to check.'
+      },
       common: {
         cancel: 'Cancel',
         copy: 'Copy',
@@ -695,6 +715,26 @@ export const resources = {
   vi: {
     translation: {
       appName: 'xrncal',
+      tasks: {
+        title: 'Việc cần làm', calendar: 'Lịch', account: 'Máy chủ CalDAV', switchWorkspace: 'Chuyển giữa lịch và công việc',
+        collapseSidebar: 'Thu gọn thanh bên', expandSidebar: 'Mở thanh bên', clearDate: 'Bỏ lọc theo ngày', syncServer: 'Đồng bộ một máy chủ',
+        createList: 'Thêm danh mục', editList: 'Sửa danh mục', deleteList: 'Xóa danh mục',
+        listOptions: 'Tùy chọn cho {{name}}', listName: 'Tên danh mục', listColor: 'Màu', saveList: 'Lưu danh mục',
+        deleteConfirm: 'Xóa “{{name}}” và các công việc trong danh mục khỏi máy chủ này?',
+        noAccount: 'Thêm máy chủ Synology để xem công việc.', addAccount: 'Thêm máy chủ công việc',
+        servers: 'Máy chủ công việc', editServer: 'Sửa máy chủ công việc', removeServer: 'Gỡ máy chủ công việc',
+        editServerNamed: 'Sửa máy chủ {{name}}', removeServerNamed: 'Gỡ máy chủ {{name}}',
+        serverName: 'Tên hiển thị', serverUrl: 'Địa chỉ Synology', serverUser: 'Tên đăng nhập', serverPassword: 'Mật khẩu',
+        keepPassword: 'Để trống để dùng mật khẩu đã lưu', saveServer: 'Lưu máy chủ',
+        removeServerConfirm: 'Gỡ kết nối đã lưu cho “{{name}}” khỏi thiết bị này?',
+        pending: 'Chưa hoàn thành', completed: 'Đã hoàn thành', allLists: 'Mọi danh mục', list: 'Danh mục công việc',
+        inbox: 'Hộp thư đến', loading: 'Đang đọc công việc…',
+        noLists: 'Không tìm thấy danh sách công việc.', noPending: 'Không có việc chưa hoàn thành.', noCompleted: 'Không có việc đã hoàn thành.',
+        untitled: 'Công việc chưa có tên', overdue: 'Quá hạn · {{date}}',
+        changed: 'Công việc đã thay đổi trên máy chủ. Hãy làm mới rồi thử lại.',
+        readOnly: 'Chỉ có thể xem công việc này.',
+        unconfirmed: 'Máy chủ chưa xác nhận trạng thái mới. Hãy làm mới để kiểm tra.'
+      },
       common: {
         cancel: 'Hủy',
         copy: 'Sao chép',

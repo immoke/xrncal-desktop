@@ -29,6 +29,7 @@ import { CALENDAR_MAX_OCCURRENCES, calendarExpansionBudget, type ExpansionBudget
 import { namedDays, occurrenceShift, ruleForMovedStart, ruleWithMovedEnd, seriesZone, wallTime } from '@shared/series-update'
 import { DateTime } from 'luxon'
 import { log } from '../../log'
+import { MISSING_CALDAV_CALENDARS } from './sync-state-repo'
 
 export class ReadOnlyCalendarError extends Error {
   constructor(calendarId: string) {
@@ -298,7 +299,7 @@ export class EventsRepo {
   private checkReadOnlyCalendar(calendarId: string, allowReadOnly = false): void {
     if (allowReadOnly) return
     const row = this.db
-      .prepare('SELECT is_read_only FROM calendars WHERE id = ?')
+      .prepare(`SELECT is_read_only OR id IN (${MISSING_CALDAV_CALENDARS}) AS is_read_only FROM calendars WHERE id = ?`)
       .get<{ is_read_only: number }>(calendarId)
     if (row && row.is_read_only === 1) {
       throw new ReadOnlyCalendarError(calendarId)
@@ -1383,6 +1384,7 @@ export class EventsRepo {
       SELECT * FROM events
       WHERE calendar_id IN (${placeholders})
         AND is_deleted = 0
+        AND calendar_id NOT IN (${MISSING_CALDAV_CALENDARS})
         AND (
           (rrule IS NULL AND lunar_rule IS NULL AND dtstart_utc <= ? AND dtend_utc >= ?)
           -- A recurrence cannot produce an occurrence before its own DTSTART, so
@@ -2023,6 +2025,7 @@ export class EventsRepo {
             .prepare(
               `SELECT * FROM events
                WHERE is_deleted = 0 AND ${kind}
+                 AND calendar_id NOT IN (${MISSING_CALDAV_CALENDARS})
                  AND (rowid IN (SELECT rowid FROM events_fts WHERE events_fts MATCH ?)
                       OR title LIKE ? ESCAPE '\\' OR notes LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\')
                ORDER BY dtstart_utc DESC LIMIT ?`
@@ -2036,6 +2039,7 @@ export class EventsRepo {
         .prepare(
           `SELECT * FROM events
            WHERE is_deleted = 0 AND ${kind}
+             AND calendar_id NOT IN (${MISSING_CALDAV_CALENDARS})
              AND (title LIKE ? ESCAPE '\\' OR notes LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\')
            ORDER BY dtstart_utc DESC LIMIT ?`
         )
@@ -2089,6 +2093,7 @@ export class EventsRepo {
          JOIN calendars c ON c.id = e.calendar_id
          WHERE e.is_deleted = 0
            AND c.is_read_only = 0
+           AND c.id NOT IN (${MISSING_CALDAV_CALENDARS})
            AND TRIM(e.title) <> ''
            AND (e.rrule IS NOT NULL OR (e.dtstart_utc >= ? AND e.dtstart_utc <= ?))
          ORDER BY e.dtstart_utc DESC
@@ -2130,6 +2135,7 @@ export class EventsRepo {
          JOIN calendars c ON c.id = e.calendar_id
          WHERE e.is_deleted = 0
            AND c.is_read_only = 0
+           AND c.id NOT IN (${MISSING_CALDAV_CALENDARS})
            AND TRIM(COALESCE(e.location, '')) <> ''
            AND (e.rrule IS NOT NULL OR (e.dtstart_utc >= ? AND e.dtstart_utc <= ?))
          ORDER BY e.dtstart_utc DESC
@@ -2171,7 +2177,7 @@ export class EventsRepo {
         `SELECT e.id as event_id, e.calendar_id, c.name as calendar_name, e.title, e.updated_at, e.is_deleted
          FROM events e
          JOIN calendars c ON c.id = e.calendar_id
-         WHERE e.has_conflict = 1`
+         WHERE e.has_conflict = 1 AND c.id NOT IN (${MISSING_CALDAV_CALENDARS})`
       )
       .all<{
         event_id: string

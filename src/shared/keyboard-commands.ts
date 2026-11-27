@@ -23,6 +23,7 @@ export interface KeyInput {
 }
 
 export interface KeyContext {
+  tasksOpen?: boolean
   /** A layer above the calendar (dialog, menu, editor) is open. */
   overlayOpen: boolean
   searchOpen: boolean
@@ -101,7 +102,7 @@ export function commandForKey(input: KeyInput, ctx: KeyContext): KeyCommand | nu
   const lower = input.key.toLowerCase()
 
   if (input.ctrl && lower === 'k') {
-    return ctx.overlayOpen && !ctx.searchOpen ? null : { type: 'toggleSearch' }
+    return ctx.tasksOpen || (ctx.overlayOpen && !ctx.searchOpen) ? null : { type: 'toggleSearch' }
   }
   // Closing the window leaves xrncal in the tray; Ctrl+Q is the way out.
   if (input.ctrl && !input.shift && lower === 'q') return { type: 'quit' }
@@ -115,6 +116,7 @@ export function commandForKey(input: KeyInput, ctx: KeyContext): KeyCommand | nu
   if ((input.key === 'Enter' || input.key === ' ') && input.onControl) return null
 
   if (input.ctrl && lower === 'b') return { type: 'toggleSidebar' }
+  if (ctx.tasksOpen) return !input.ctrl && lower === 'r' ? { type: 'sync' } : null
   if (input.ctrl && !input.shift && lower === 'z') return { type: 'undo' }
   if (input.ctrl && !input.shift && lower === 'p') return { type: 'print' }
   // Anything else held with Ctrl/Cmd belongs to Electron (reload, zoom...).

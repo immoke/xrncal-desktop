@@ -1,5 +1,6 @@
 import type { ISqliteDatabase } from '../sqlite-driver'
 import { settleDefaultCalendar } from './default-calendar'
+import { MISSING_CALDAV_CALENDARS } from './sync-state-repo'
 
 export interface RemoveCalendarOptions {
   /** Keep the calendar's events by moving them into this calendar first.
@@ -50,7 +51,8 @@ export function removeCalendar(
     }
     if (target === calendarId) throw new Error('The events cannot move into the calendar being removed.')
     const to = db
-      .prepare('SELECT is_read_only, subscription_url, holiday_type FROM calendars WHERE id = ?')
+      .prepare(`SELECT is_read_only, subscription_url, holiday_type FROM calendars
+        WHERE id = ? AND id NOT IN (${MISSING_CALDAV_CALENDARS})`)
       .get<{ is_read_only: number; subscription_url: string | null; holiday_type: string | null }>(target)
     if (!to || to.is_read_only === 1 || to.subscription_url || to.holiday_type) {
       throw new Error('The events can only move into a calendar that can be written to.')

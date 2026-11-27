@@ -66,6 +66,14 @@ const xrncalApi: XrncalAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.CALENDAR.DELETE, id, options),
     eventCount: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.CALENDAR.EVENT_COUNT, id)
   },
+  tasks: {
+    servers: () => ipcRenderer.invoke(IPC_CHANNELS.TASKS.SERVERS),
+    saveServer: (input) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.SAVE_SERVER, input),
+    removeServer: (id) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.REMOVE_SERVER, id),
+    list: (accountId) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.LIST, accountId),
+    setCompleted: (accountId, id, completed) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.SET_COMPLETED, accountId, id, completed),
+    changeList: (accountId, change) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.CHANGE_LIST, accountId, change)
+  },
   events: {
     queryRange: (calendarIds: string[], startUtc: string, endUtc: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.EVENT.QUERY_RANGE, calendarIds, startUtc, endUtc),

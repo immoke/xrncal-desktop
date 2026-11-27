@@ -1,5 +1,11 @@
 import type { ISqliteDatabase } from '../sqlite-driver'
 
+const CALDAV_MISSING = 'caldav:missing'
+
+/** Hidden from the app while the server no longer has the collection. */
+export const MISSING_CALDAV_CALENDARS =
+  `SELECT calendar_id FROM sync_state WHERE sync_status = '${CALDAV_MISSING}' AND calendar_id IS NOT NULL`
+
 interface CalendarSyncState {
   calendarId: string
   syncToken: string | null
@@ -40,13 +46,15 @@ export class SyncStateRepo {
               JOIN calendars c ON c.id = e.calendar_id
               JOIN accounts a ON a.id = c.account_id
              WHERE (e.dirty = 1 OR e.rsvp_pending IS NOT NULL) AND e.has_conflict = 0
-               AND a.type != 'local' AND a.is_active = 1)
+               AND a.type != 'local' AND a.is_active = 1
+               AND c.id NOT IN (${MISSING_CALDAV_CALENDARS}))
          + (SELECT COUNT(*) FROM event_exceptions x
               JOIN events e ON e.id = x.master_event_id
               JOIN calendars c ON c.id = e.calendar_id
               JOIN accounts a ON a.id = c.account_id
              WHERE x.dirty = 1 AND e.has_conflict = 0
-               AND a.type != 'local' AND a.is_active = 1) AS cnt`
+               AND a.type != 'local' AND a.is_active = 1
+               AND c.id NOT IN (${MISSING_CALDAV_CALENDARS})) AS cnt`
       )
       .get<{ cnt: number }>()
     return row?.cnt ?? 0
@@ -63,6 +71,23 @@ export class SyncStateRepo {
     this.db
       .prepare('UPDATE sync_state SET sync_token = NULL WHERE calendar_id = ?')
       .run(calendarId)
+  }
+
+  markCalDavCalendarMissing(calendarId: string, accountId: string): boolean {
+    return this.db.prepare(
+      `INSERT INTO sync_state (calendar_id, sync_status, updated_at)
+       SELECT id, ?, ? FROM calendars WHERE id = ? AND account_id = ?
+       ON CONFLICT(calendar_id) DO UPDATE SET
+         sync_status = excluded.sync_status, updated_at = excluded.updated_at,
+         sync_token = NULL, error_message = NULL
+       WHERE sync_state.sync_status != excluded.sync_status`
+    ).run(CALDAV_MISSING, new Date().toISOString(), calendarId, accountId).changes > 0
+  }
+
+  restoreCalDavCalendar(calendarId: string): boolean {
+    return this.db.prepare(
+      "UPDATE sync_state SET sync_status = 'idle' WHERE calendar_id = ? AND sync_status = ?"
+    ).run(calendarId, CALDAV_MISSING).changes > 0
   }
 
   saveSyncToken(calendarId: string, token: string): void {

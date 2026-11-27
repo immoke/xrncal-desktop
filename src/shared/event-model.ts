@@ -320,6 +320,7 @@ export interface SyncResult {
   pushedCount: number
   errorCount: number
   message?: string
+  calendarListChanged?: boolean
   /** Accounts that could not be synced this round, by account id. */
   accountErrors?: Record<string, string>
 }

@@ -1,4 +1,24 @@
 export const zhCN = {
+  tasks: {
+    title: '任务', calendar: '日历', account: 'CalDAV 服务器', switchWorkspace: '切换日历或任务',
+    collapseSidebar: '折叠侧边栏', expandSidebar: '展开侧边栏', clearDate: '清除日期筛选', syncServer: '同步指定服务器',
+    createList: '新建分类', editList: '修改分类', deleteList: '删除分类',
+    listOptions: '“{{name}}”选项', listName: '分类名称', listColor: '颜色', saveList: '保存分类',
+    deleteConfirm: '从此服务器删除「{{name}}」及其中的所有任务？',
+    noAccount: '添加群晖任务服务器后即可查看任务。', addAccount: '添加任务服务器',
+    servers: '任务服务器', editServer: '修改任务服务器', removeServer: '移除任务服务器',
+    editServerNamed: '修改服务器「{{name}}」', removeServerNamed: '移除服务器「{{name}}」',
+    serverName: '显示名称', serverUrl: '群晖地址', serverUser: '用户名', serverPassword: '密码',
+    keepPassword: '留空则保留已保存的密码', saveServer: '保存服务器',
+    removeServerConfirm: '从本设备移除「{{name}}」的连接配置？',
+    pending: '待办', completed: '已完成', allLists: '全部分类', list: '任务分类',
+    inbox: '收件箱', loading: '正在读取任务…',
+    noLists: '此账户下未找到任务清单。', noPending: '没有待办任务。', noCompleted: '没有已完成的任务。',
+    untitled: '未命名任务', overdue: '已逾期 · {{date}}',
+    changed: '服务器上的任务已变化，请刷新清单后重试。',
+    readOnly: '此任务仅可查看。',
+    unconfirmed: '服务器尚未确认新的任务状态，请刷新查看。'
+  },
   appName: 'xrncal',
   common: {
     cancel: '取消',

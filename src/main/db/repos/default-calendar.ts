@@ -1,13 +1,15 @@
 import type { ISqliteDatabase } from '../sqlite-driver'
 import { compareAccountsForSidebar, compareCalendarsForSidebar } from '@shared/calendar-order'
 import { LOCAL_ACCOUNT_ID } from './detach-account'
+import { MISSING_CALDAV_CALENDARS } from './sync-state-repo'
 
 /** The calendar a fresh profile starts with, on this computer. */
 export const LOCAL_CALENDAR_ID = 'calendar-local-default'
 
 /** A calendar new events can be written to: not read-only, and not filled from
  *  a feed (subscriptions and holidays are both read-only too). */
-const WRITABLE = 'is_read_only = 0 AND subscription_url IS NULL AND holiday_type IS NULL'
+const WRITABLE = `is_read_only = 0 AND subscription_url IS NULL AND holiday_type IS NULL
+  AND id NOT IN (${MISSING_CALDAV_CALENDARS})`
 
 /**
  * The account that owns calendars kept only on this computer. Holidays, .ics
@@ -55,6 +57,7 @@ interface CalendarChoiceRow {
   /** Null for a calendar whose account row is gone: it shows under this computer. */
   account_type: string | null
   account_created_at: string | null
+  is_missing: number
 }
 
 const isRemote = (row: CalendarChoiceRow) => row.account_type !== null && row.account_type !== 'local'
@@ -102,12 +105,13 @@ export function settleDefaultCalendar(db: ISqliteDatabase, now = new Date().toIS
     const rows = db
       .prepare(
         `SELECT c.id, c.name, c.account_id, c.is_visible, c.is_read_only, c.is_default, c.subscription_url,
-                c.holiday_type, a.type AS account_type, a.created_at AS account_created_at
+                c.holiday_type, a.type AS account_type, a.created_at AS account_created_at,
+                c.id IN (${MISSING_CALDAV_CALENDARS}) AS is_missing
          FROM calendars c LEFT JOIN accounts a ON a.id = c.account_id`
       )
       .all<CalendarChoiceRow>()
     const writable = rows
-      .filter((r) => r.is_read_only === 0 && !r.subscription_url && !r.holiday_type)
+      .filter((r) => r.is_missing === 0 && r.is_read_only === 0 && !r.subscription_url && !r.holiday_type)
       .sort(sidebarOrder)
     const remote = writable.filter(isRemote)
     const pool = remote.length > 0 ? remote : writable

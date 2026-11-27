@@ -128,6 +128,14 @@ describe('IPC Channels and Contracts', () => {
         delete: async () => true,
         eventCount: async () => 0
       },
+      tasks: {
+        servers: async () => [],
+        saveServer: async ({ name, username, serverUrl }) => ({ id: 'fixture', name, username, serverUrl }),
+        removeServer: async () => {},
+        list: async () => [],
+        setCompleted: async () => ({ status: 'changed' }),
+        changeList: async () => {}
+      },
       events: {
         queryRange: async () => [],
         getById: async () => null,
